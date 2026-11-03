@@ -1,0 +1,12 @@
+{
+  "name": "clearbook-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clearbook frontend for multi-account transactions and reimbursements",
+  "scripts": {
+    "dev": "node scripts/dev-server.cjs",
+    "build": "node scripts/build.cjs",
+    "check": "node --check app.js",
+    "test:integration": "node tests/integration.cjs"
+  }
+}

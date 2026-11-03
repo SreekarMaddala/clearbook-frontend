@@ -1,0 +1,15 @@
+.local/
+__pycache__/
+*.pyc
+.aws-sam/
+.env
+.env.*
+!.env.example
+.aws/
+credentials
+*.pem
+*.key
+*.log
+node_modules/
+dist/
+.vercel/
