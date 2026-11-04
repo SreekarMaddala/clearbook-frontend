@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node scripts/dev-server.cjs",
     "build": "node scripts/build.cjs",
-    "check": "node --check app.js",
+    "check": "node --check app.js && node --check auth.js",
+    "test": "node tests/auth.cjs && node tests/auth-gate.cjs",
     "test:integration": "node tests/integration.cjs"
   }
 }
