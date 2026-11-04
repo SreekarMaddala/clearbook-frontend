@@ -65,7 +65,7 @@ async function loadSnapshot(notify=false) {
         if(!window.ClearbookAuth.isSignedIn())return false;
         providerData = {customers:customers.items, users:users.items};
         connected=true; lastRefreshed=new Date();
-        if(notify)toast('Customer access refreshed.');
+        if(notify)toast('Organization access refreshed.');
         return true;
       }
     }
@@ -134,7 +134,7 @@ document.addEventListener('click', async event=>{
   if(action==='refresh')await refreshData(true);
   if(isProvider()){
    if(action==='new-customer'||action==='new-customer-user'){
-    detailDialog.innerHTML=window.ClearbookProvider.form(action==='new-customer'?'customer':'user',providerData.customers);
+    detailDialog.innerHTML=window.ClearbookProvider.form(action==='new-customer'?'customer':'user',providerData.customers,providerData.users);
     detailDialog.showModal();
    }
    if(action==='close-detail'&&!submitting)detailDialog.close();
@@ -178,7 +178,7 @@ document.addEventListener('submit',async event=>{
    const body=Object.fromEntries(new FormData(form));
    const result=await api(form.id==='customer-form'?'/provider/customers':'/provider/users',{method:'POST',body});
    form.reset();detailDialog.innerHTML='';detailDialog.close();
-   toast(form.id==='customer-form'?'Customer workspace created.':result.existing_account?'Existing account linked. Its password was unchanged.':'Customer user created. Share the temporary password privately.');
+   toast(form.id==='customer-form'?'Organization onboarded.':result.existing_account?'Existing account linked. Its password was unchanged.':'Organization user added. Share the temporary password privately.');
   }else if(form.id==='transaction-form'){
    captureDraft();const t={date:draft.date,amount:draft.amount,type:formType,payer:draft.payer,
     vendor:formType==='EXPENSE'?draft.vendor||null:null,recipient:formType==='EXPENSE'?null:draft.recipient,
@@ -208,8 +208,8 @@ function exportCSV(){const rows=[['Date','Type','Paid by','Category','Location',
 let authError='';
 function renderProvider(){
  const userView=page==='users';
- document.querySelector('#navigation').innerHTML=[['customers','Customers','accounts'],['users','Users','vendors']].map(([key,label,ico])=>`<a href="#${key}" class="${(userView?key==='users':key==='customers')?'active':''}">${icon(ico)}<span class="nav-text">${label}</span></a>`).join('');
- document.querySelector('#breadcrumb-current').textContent=userView?'Customer users':'Customers';
+ document.querySelector('#navigation').innerHTML=[['customers','Organizations','accounts'],['users','Users','vendors']].map(([key,label,ico])=>`<a href="#${key}" class="${(userView?key==='users':key==='customers')?'active':''}">${icon(ico)}<span class="nav-text">${label}</span></a>`).join('');
+ document.querySelector('#breadcrumb-current').textContent=userView?'Organization users':'Organizations';
  main.innerHTML=window.ClearbookProvider.render({...providerData,page,loading,error:loadError});
  document.querySelector('.local-badge').textContent=loading?'Refreshing...':'Provider console';
 }
@@ -229,7 +229,7 @@ function renderAuth(){
   document.querySelector('#navigation').innerHTML='';
   return true;
  }
- const user={name:workspaceSession.name,role:isProvider()?'Software provider':'Customer user'};
+ const user={name:workspaceSession.name,role:isProvider()?'Software provider':'Organization user'};
  const workspace=document.querySelector('.workspace');
  if(workspace)workspace.innerHTML=`<span class="workspace-avatar">${isProvider()?'CB':esc(initials(workspaceSession.workspace.name))}</span><div><strong>${esc(isProvider()?'Clearbook':workspaceSession.workspace.name)}</strong><small>${isProvider()?'Provider console':'Customer workspace'}</small></div>`;
  const avatar=document.querySelector('.top-avatar');if(avatar&&user){avatar.textContent=initials(user.name);avatar.setAttribute('aria-label',user.name);}

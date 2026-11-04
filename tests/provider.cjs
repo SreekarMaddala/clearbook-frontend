@@ -28,7 +28,7 @@ function setup(role = 'provider') {
       let data;
       if(endpoint==='/session') {
         if(role==='unassigned')return {status:403,ok:false,json:async()=>({error:'No customer access.'})};
-        data={role,name:role==='provider'?'Software provider':'user@example.com',workspace:role==='customer'?{id:'customer-a',name:'Customer A'}:null};
+        data={role,name:role==='provider'?'Software provider':'user@example.com',workspace:role==='customer'?{id:'customer-a',name:'Organization A'}:null};
       }else if(endpoint==='/provider/customers') {
         if(options.method==='POST')customers.push({id:'customer-b',name:body.name,enabled:true});
         data={items:[...customers]};
@@ -51,7 +51,7 @@ function setup(role = 'provider') {
 (async()=>{
   const provider=setup();await provider.context.window.CLEARBOOK_READY;
   assert.deepEqual(provider.requests.map(request=>request.endpoint),['/session','/provider/customers','/provider/users']);
-  assert.ok(provider.node('#main').innerHTML.includes('Your customers'));
+  assert.ok(provider.node('#main').innerHTML.includes('Organizations'));
   assert.ok(provider.node('#main').innerHTML.includes('Customer &lt;A&gt;'));
   assert.ok(!provider.node('#navigation').innerHTML.includes('Transactions'));
   assert.ok(provider.node('.profile').innerHTML.includes('Software provider'));
@@ -63,10 +63,10 @@ function setup(role = 'provider') {
   await provider.handlers.click({target:{closest:()=>({dataset:{action:'new-customer'}})}});
   assert.ok(provider.node('#detail-dialog').innerHTML.includes('customer-form'));
   let cleared=false;
-  const form={id:'customer-form',fields:{name:'Customer B'},querySelector:()=>({disabled:false}),reset(){cleared=true;}};
+  const form={id:'customer-form',fields:{name:'Organization B'},querySelector:()=>({disabled:false}),reset(){cleared=true;}};
   await provider.handlers.submit({target:form,preventDefault(){}});
   assert.ok(cleared);
-  assert.ok(provider.node('#main').innerHTML.includes('Customer B'));
+  assert.ok(provider.node('#main').innerHTML.includes('Organization B'));
   provider.run("page='users';render()");
   assert.ok(provider.node('#main').innerHTML.includes('user@example.com'));
   await provider.handlers.click({target:{closest:()=>({dataset:{action:'new-customer-user'}})}});
@@ -81,12 +81,12 @@ function setup(role = 'provider') {
 
   const customer=setup('customer');await customer.context.window.CLEARBOOK_READY;
   assert.ok(customer.node('#main').innerHTML.includes('Total expenses'));
-  assert.ok(customer.node('.workspace').innerHTML.includes('Customer A'));
+  assert.ok(customer.node('.workspace').innerHTML.includes('Organization A'));
   assert.ok(customer.requests.every(request=>!request.endpoint.startsWith('/provider/')));
 
   const unassigned=setup('unassigned');await unassigned.context.window.CLEARBOOK_READY;
   assert.equal(unassigned.requests.length,1);
   assert.ok(unassigned.node('#main').innerHTML.includes('No customer access.'));
   assert.ok(!unassigned.node('#main').innerHTML.includes('Total expenses'));
-  console.log('PASS: provider routing, escaped customer names, customer creation, user access controls, customer ledger routing, and fail-closed unassigned accounts.');
+  console.log('PASS: provider routing, escaped customer names, organization onboarding, user access controls, isolated organization ledgers, and fail-closed unassigned accounts.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
