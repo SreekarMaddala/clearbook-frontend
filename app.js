@@ -27,6 +27,9 @@ const categories = ['Fuel','Food','Porter','Labour Transport','Power Tools','Tol
 const categoryColors = ['#365b45','#94ad7a','#c4cfab','#d9bd8e','#728c9c','#9d87ad','#b78565','#638f82','#dedfd4','#b4a367','#8d9b72'];
 let db = {accounts:[], vendors:[], transactions:[]};
 let summary = {totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};
+let workspaceSession = null;
+let providerData = {customers:[], users:[]};
+const isProvider = () => workspaceSession?.role === 'provider';
 let pendingLoad = Promise.resolve(false);
 let loading = false, connected = false, lastRefreshed = null, loadError = '', submitting = false;
 const apiConfig = window.CLEARBOOK_CONFIG || {apiBase:'/api'};
@@ -49,8 +52,23 @@ function refreshData(notify=false) {
 }
 async function loadSnapshot(notify=false) {
   if(window.ClearbookAuth?.enabled&&!window.ClearbookAuth.isSignedIn()){render();return false;}
+  if(window.ClearbookAuth?.enabled)workspaceSession=null;
   loading=true; loadError=''; render();
   try {
+    if(window.ClearbookAuth?.enabled){
+      const session = await api('/session');
+      if(!window.ClearbookAuth.isSignedIn())return false;
+      if(!['provider','customer'].includes(session.role)||!session.name||(session.role==='customer'&&(!session.workspace?.id||!session.workspace?.name)))throw new Error('This account has no workspace access.');
+      workspaceSession = session;
+      if(isProvider()){
+        const [customers, users] = await Promise.all([api('/provider/customers'), api('/provider/users')]);
+        if(!window.ClearbookAuth.isSignedIn())return false;
+        providerData = {customers:customers.items, users:users.items};
+        connected=true; lastRefreshed=new Date();
+        if(notify)toast('Customer access refreshed.');
+        return true;
+      }
+    }
     const [accounts,vendors,categoryData,dashboardData,first] = await Promise.all([
       api('/accounts'),api('/vendors'),api('/categories'),api('/dashboard'),api('/transactions?limit=200&page=1'),
     ]);
@@ -97,8 +115,8 @@ function table(){const list=filteredTransactions(),size=page==='overview'?5:10;c
 function creditorStrip(){return `<section class="panel creditor-strip"><div class="panel-heading"><div><h2>A quick look at paybacks</h2><p class="panel-subtitle">A little help, clearly accounted for.</p></div><a class="button text" href="#creditors">View all paybacks ${icon('arrow')}</a></div><div class="creditor-mini-grid">${externalAccounts().slice(0,3).map((a,i)=>`<div class="creditor-mini"><span class="initials ${['','sage','lilac'][i]}">${esc(initials(a.owner))}</span><div><strong>${esc(a.owner)}</strong><small>${esc(a.name)}</small></div><div class="balance"><strong>${money(creditorStats(a.id).balance)}</strong><button data-repay="${a.id}">Record payback ↗</button></div></div>`).join('')}</div></section>`;}
 function creditors(){return `${heading('Good accounts. Clear relationships.','See who has your back, and what you owe them.','PAYBACKS & REIMBURSEMENTS')}${metrics(true)}<div class="creditor-cards">${externalAccounts().map((a,i)=>{const s=creditorStats(a.id);return `<section class="panel creditor-card"><div class="person"><span class="initials ${['','sage','lilac'][i%3]}">${esc(initials(a.owner))}</span><div><h2>${esc(a.owner)}</h2><small>${esc(a.name)}</small></div></div><div class="detail-line"><span>Total funded</span><strong>${money(s.fronted)}</strong></div><div class="detail-line"><span>Total reimbursed</span><strong>${money(s.settled)}</strong></div><div class="owed-line"><span>Outstanding balance</span><strong>${money(s.balance)}</strong></div><button class="button ${s.balance>0?'primary':''}" data-repay="${a.id}" ${s.balance<=0?'disabled':''}>${icon('transactions')} ${s.balance>0?'Record payback':'All settled'}</button></section>`;}).join('')}</div><p class="section-note">${icon('creditors')} Repayments reduce what you owe. They don’t count as a second expense. Partial reimbursements are allocated to the oldest expenses first by the server.</p>`;}
 function directory(){const isAccounts=page==='accounts';return `${heading(isAccounts?'Every account. One picture.':'The people behind your progress.',isAccounts?'Business funds and personal support, organized in one place.':'A complete payment history, no matter who made the payment.',isAccounts?'FUNDING ACCOUNTS':'YOUR VENDOR DIRECTORY')}<div style="margin-bottom:22px">${button(isAccounts?'Add account':'Add vendor',isAccounts?'new-account':'new-vendor','plus')}</div><div class="directory-grid">${(isAccounts?db.accounts:db.vendors).map((item,i)=>{const transactions=db.transactions.filter(t=>t.type==='EXPENSE'&&(isAccounts?t.payer===item.id:t.vendor===item.id));return `<section class="panel directory-card"><span class="initials ${['','sage','lilac','blue'][i%4]}">${isAccounts?icon('accounts'):esc(initials(item.name))}</span><h2>${esc(item.name)}</h2><p>${esc(isAccounts?item.detail:item.role)}</p><span class="status ${isAccounts&&item.type==='THIRD_PARTY_CREDITOR'?'pending':'paid'}">${isAccounts?(item.type==='INTERNAL'?'Business owned':'External creditor'):esc(item.category)}</span><div class="large-number">${money(sum(transactions))}</div><small>${transactions.length} expense payment${transactions.length!==1?'s':''} · all time</small><div style="margin-top:16px;display:flex;justify-content:space-between"><button class="button text" data-edit-reference="${item.id}">Edit</button><button class="button text" data-directory="${item.id}">View transactions ${icon('arrow')}</button></div></section>`;}).join('')}</div>`;}
-function render(){if(renderAuth())return;navigation();main.innerHTML=(!connected?`<div class="connection-banner ${loadError?'error':''}" role="status">${esc(loadError||'Loading your accounts and transactions...')} ${loadError?'<button class="button" data-action="refresh">Retry</button>':''}</div>`:loadError?`<div class="connection-banner error" role="alert">Refresh failed: ${esc(loadError)}. Showing data from the last successful refresh.</div>`:'')+(page==='overview'?`${heading('A clearer view of your money.','Your payments, people, and paybacks. All in one place.')}${metrics()}${charts()}${table()}${creditorStrip()}`:page==='transactions'?`${heading('Every payment has a story.','Track business expenses, external funding, and repayments.','TRANSACTION LEDGER')}${table()}`:page==='creditors'?creditors():directory());document.querySelector('.local-badge').textContent=loading?'Refreshing...':connected?`Updated ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`:'API disconnected';}
-function route(){const key=location.hash.slice(1)||'overview';page=['overview','transactions','creditors','vendors','accounts'].includes(key)?key:'overview';pageNumber=1;render();}
+function render(){if(renderAuth())return;if(isProvider()){renderProvider();return;}navigation();main.innerHTML=(!connected?`<div class="connection-banner ${loadError?'error':''}" role="status">${esc(loadError||'Loading your accounts and transactions...')} ${loadError?'<button class="button" data-action="refresh">Retry</button>':''}</div>`:loadError?`<div class="connection-banner error" role="alert">Refresh failed: ${esc(loadError)}. Showing data from the last successful refresh.</div>`:'')+(page==='overview'?`${heading('A clearer view of your money.','Your payments, people, and paybacks. All in one place.')}${metrics()}${charts()}${table()}${creditorStrip()}`:page==='transactions'?`${heading('Every payment has a story.','Track business expenses, external funding, and repayments.','TRANSACTION LEDGER')}${table()}`:page==='creditors'?creditors():directory());document.querySelector('.local-badge').textContent=loading?'Refreshing...':connected?`Updated ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`:'API disconnected';}
+function route(){const key=location.hash.slice(1)||'overview';page=['overview','transactions','creditors','vendors','accounts','customers','users'].includes(key)?key:'overview';pageNumber=1;render();}
 window.addEventListener('hashchange',route);
 function options(list,selected){return list.map(a=>`<option value="${esc(a.id)}" ${selected===a.id?'selected':''}>${esc(a.name)}</option>`).join('');}
 function captureDraft(){const form=document.querySelector('#transaction-form');if(form)draft={...draft,...Object.fromEntries(new FormData(form).entries())};}
@@ -114,6 +132,22 @@ document.addEventListener('click', async event=>{
   if(action==='sign-in'){await window.ClearbookAuth.login();return;}
   if(action==='sign-out'){await window.ClearbookAuth.logout();return;}
   if(action==='refresh')await refreshData(true);
+  if(isProvider()){
+   if(action==='new-customer'||action==='new-customer-user'){
+    detailDialog.innerHTML=window.ClearbookProvider.form(action==='new-customer'?'customer':'user',providerData.customers);
+    detailDialog.showModal();
+   }
+   if(action==='close-detail'&&!submitting)detailDialog.close();
+   if(target.dataset.providerKind&&!submitting){
+    submitting=true;
+    try{
+     target.disabled=true;
+     await api(`/provider/${target.dataset.providerKind}/${target.dataset.providerId}`,{method:'PATCH',body:{enabled:target.dataset.providerEnabled==='true'}});
+     await refreshData();
+    }finally{submitting=false;target.disabled=false;}
+   }
+   return;
+  }
   if(action==='add'){if(!connected){toast('Connect to the API first.');return;}openForm();}
   if(action==='filters'){showFilters=!showFilters;render();}
   if(action==='clear-filters'){filters={};tab='all';search='';pageNumber=1;render();}
@@ -134,12 +168,18 @@ document.addEventListener('click', async event=>{
 document.addEventListener('input',event=>{if(event.target.id==='search'){search=event.target.value;pageNumber=1;render();document.querySelector('#search').focus();}});
 document.addEventListener('change',event=>{const el=event.target;if(el.dataset.filter){filters[el.dataset.filter]=el.value;pageNumber=1;render();}if(el.name==='vendor'){const p=vendor(el.value);const select=dialog.querySelector('[name="category"]');if(p&&select)select.value=p.category;}if(el.name==='receipt'){const file=el.files[0];if(file){if(file.size>10*1024*1024||!['application/pdf','image/png','image/jpeg'].includes(file.type)){el.value='';toast('Choose a PDF, PNG, or JPEG smaller than 10 MB.');return;}draft.receiptName=file.name;document.querySelector('#file-label').textContent=file.name;}}});
 document.addEventListener('submit',async event=>{
- const form=event.target;if(!['transaction-form','directory-form','reversal-form'].includes(form.id))return;
+ const form=event.target;if(!['transaction-form','directory-form','reversal-form','customer-form','customer-user-form'].includes(form.id))return;
  event.preventDefault();if(submitting)return;submitting=true;
  const submitButton=form.querySelector('button[type="submit"], button.primary');
  if(submitButton)submitButton.disabled=true;
  try {
-  if(form.id==='transaction-form'){
+  if(form.id==='customer-form'||form.id==='customer-user-form'){
+   if(!isProvider())throw new Error('Software-provider access is required.');
+   const body=Object.fromEntries(new FormData(form));
+   const result=await api(form.id==='customer-form'?'/provider/customers':'/provider/users',{method:'POST',body});
+   form.reset();detailDialog.innerHTML='';detailDialog.close();
+   toast(form.id==='customer-form'?'Customer workspace created.':result.existing_account?'Existing account linked. Its password was unchanged.':'Customer user created. Share the temporary password privately.');
+  }else if(form.id==='transaction-form'){
    captureDraft();const t={date:draft.date,amount:draft.amount,type:formType,payer:draft.payer,
     vendor:formType==='EXPENSE'?draft.vendor||null:null,recipient:formType==='EXPENSE'?null:draft.recipient,
     category:formType==='EXPENSE'?draft.category:null,mode:draft.mode,location:draft.location?.trim(),notes:(draft.notes||'').trim(),receiptName:draft.receiptName||null,
@@ -166,6 +206,13 @@ document.addEventListener('submit',async event=>{
 });
 function exportCSV(){const rows=[['Date','Type','Paid by','Category','Location','Mode','Amount (INR)','Status','Notes'],...filteredTransactions().map(t=>[t.date,t.type,account(t.payer)?.name,t.category||'',t.location,t.mode,t.amount,reimbursement(t)[1],t.notes])];const safeCell=value=>{let text=String(value??'');if(/^[=+@\-\t\r]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};const blob=new Blob(['\uFEFF'+rows.map(row=>row.map(safeCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`clearbook-transactions-${isoToday()}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Transaction export downloaded.');}
 let authError='';
+function renderProvider(){
+ const userView=page==='users';
+ document.querySelector('#navigation').innerHTML=[['customers','Customers','accounts'],['users','Users','vendors']].map(([key,label,ico])=>`<a href="#${key}" class="${(userView?key==='users':key==='customers')?'active':''}">${icon(ico)}<span class="nav-text">${label}</span></a>`).join('');
+ document.querySelector('#breadcrumb-current').textContent=userView?'Customer users':'Customers';
+ main.innerHTML=window.ClearbookProvider.render({...providerData,page,loading,error:loadError});
+ document.querySelector('.local-badge').textContent=loading?'Refreshing...':'Provider console';
+}
 function renderAuth(){
  const auth=window.ClearbookAuth;
  if(!auth?.enabled)return false;
@@ -177,7 +224,14 @@ function renderAuth(){
   document.querySelector('.local-badge').textContent='Sign-in required';
   return true;
  }
- const user=auth.user();
+ if(!workspaceSession){
+  main.innerHTML=`<section class="auth-card"><div class="eyebrow">CLEARBOOK</div><h1>${loadError?'Account access unavailable':'Loading your account...'}</h1><p role="status">${esc(loadError||'Checking your workspace access.')}</p><button class="button" data-action="refresh">Retry</button><button class="button" data-action="sign-out">Sign out</button></section>`;
+  document.querySelector('#navigation').innerHTML='';
+  return true;
+ }
+ const user={name:workspaceSession.name,role:isProvider()?'Software provider':'Customer user'};
+ const workspace=document.querySelector('.workspace');
+ if(workspace)workspace.innerHTML=`<span class="workspace-avatar">${isProvider()?'CB':esc(initials(workspaceSession.workspace.name))}</span><div><strong>${esc(isProvider()?'Clearbook':workspaceSession.workspace.name)}</strong><small>${isProvider()?'Provider console':'Customer workspace'}</small></div>`;
  const avatar=document.querySelector('.top-avatar');if(avatar&&user){avatar.textContent=initials(user.name);avatar.setAttribute('aria-label',user.name);}
  const profile=document.querySelector('.profile');
  if(profile&&user)profile.innerHTML=`<span class="profile-avatar">${esc(initials(user.name))}</span><div><strong>${esc(user.name)}</strong><small>${esc(user.role)}</small></div>`;
@@ -186,6 +240,6 @@ function renderAuth(){
  return false;
 }
 if(window.ClearbookAuth){
- window.addEventListener('clearbook-auth-change',()=>{if(!window.ClearbookAuth.isSignedIn()){db={accounts:[],vendors:[],transactions:[]};summary={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};connected=false;dialog.close();detailDialog.close();render();}});
+ window.addEventListener('clearbook-auth-change',()=>{if(!window.ClearbookAuth.isSignedIn()){workspaceSession=null;providerData={customers:[],users:[]};db={accounts:[],vendors:[],transactions:[]};summary={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};connected=false;dialog.close();detailDialog.close();render();}});
  window.CLEARBOOK_READY=(async()=>{try{await window.ClearbookAuth.init();}catch(error){authError=error.message;}route();if(!window.ClearbookAuth.enabled||window.ClearbookAuth.isSignedIn())await refreshData();})();
 }else{route();window.CLEARBOOK_READY=refreshData();}

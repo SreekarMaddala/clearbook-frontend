@@ -37,10 +37,16 @@ Access and refresh tokens are stored in sessionStorage (not localStorage) and cl
 
 For Amplify, push this repository and keep `CLEARBOOK_API_BASE` set to `https://6fevwj9dy0.execute-api.ap-south-2.amazonaws.com/api`. The included `amplify.yml` checks, tests and builds into `dist`. The backend's `AllowedOrigin` must match `https://main.d1cy6ym167mgbw.amplifyapp.com`, and `CallbackUrl` must match that URL with a trailing slash. Localhost callback/logout URLs remain configured in SAM. Set your super-admin password privately using the backend repository's `python scripts/bootstrap-backend.py --set-admin-password` before signing in.
 
-The sign-in UI displays the Cognito role but does not add browser user-administration endpoints. Public signup remains disabled. Verify a real login after pushing and deploying; local mocked OAuth tests cannot prove live Cognito callbacks or the final deployed CORS settings.
+The UI resolves access through `/api/session`. Software-provider accounts see Customers and Users; active customer accounts see their own business ledger. The backend enforces both role separation and workspace isolation. Public signup remains disabled. Verify a real login after pushing and deploying; local mocked OAuth tests cannot prove live Cognito callbacks or the final deployed CORS settings.
 
 ## Verification
 
 `npm run check` checks JavaScript syntax. `npm test` covers PKCE, callback validation, session renewal and logout with mocked Cognito responses. `npm run build` creates static output. `npm run test:integration` starts an isolated backend and this repository's development proxy, then exercises the actual frontend handlers against the HTTP API. It requires the backend checkout alongside this one, or `CLEARBOOK_BACKEND_DIR` pointing at it. Python and the backend's development requirements must be installed. The test uses DOM stubs; it is not a visual browser test.
 
 Changes load on startup, after saves and through **Refresh**. No endpoint polling is used. Each transaction has a location; expenses can select a vendor.
+
+## Provider and customer dashboards
+
+Deploy this frontend together with the backend provider/customer update. Providers use **Customers ? Add customer** and **Users ? Add user** to provision access. New users change their temporary password at first Cognito sign-in; share it privately, since invitation emails are suppressed. Existing users keep their password. Disable controls revoke application access on subsequent API requests. Providers cannot enter customer ledgers, and unassigned accounts cannot load business data.
+
+The backend [provider access and deployment guide](../clearbook-backend/backend/README.md#provider-and-customer-access) describes storage, migration limits and deployment checks. Existing shared ledger records are not reassigned automatically. Loopback development remains the offline demo ledger. `npm test` also covers hosted provider/customer routing, customer creation, user access controls and unassigned-account denial; hosted API/Cognito responses are mocked.

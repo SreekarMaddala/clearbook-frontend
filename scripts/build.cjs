@@ -3,7 +3,7 @@ const path=require('node:path');
 const root=path.resolve(__dirname,'..');
 const out=path.join(root,'dist');
 fs.mkdirSync(out,{recursive:true});
-for(const filename of ['index.html','app.js','auth.js','styles.css','config.js']){
+for(const filename of ['index.html','app.js','auth.js','provider.js','styles.css','config.js']){
   let data=fs.readFileSync(path.join(root,filename),'utf8');
   if(filename==='config.js' && process.env.CLEARBOOK_API_BASE){
     const api=new URL(process.env.CLEARBOOK_API_BASE);
