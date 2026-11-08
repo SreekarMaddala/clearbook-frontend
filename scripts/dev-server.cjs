@@ -17,7 +17,7 @@ function error(response, status, message) {
 const server = http.createServer((request, response) => {
   const incoming = new URL(request.url, 'http://localhost');
   if (incoming.pathname.startsWith('/api/')) {
-    if (!['GET','POST','PATCH','OPTIONS'].includes(request.method)) return error(response,405,'Method not supported.');
+    if (!['GET','POST','PATCH','DELETE','OPTIONS'].includes(request.method)) return error(response,405,'Method not supported.');
     const origin = request.headers.origin;
     if (origin && origin !== `http://${request.headers.host}`) return error(response,403,'Cross-origin requests are not allowed.');
     const headers = {...request.headers, host:backend.host};

@@ -177,6 +177,11 @@ document.addEventListener('click', async event=>{
     detailDialog.innerHTML=window.ClearbookProvider.form(action==='new-customer'?'customer':'user',providerData.customers,providerData.users);
     detailDialog.showModal();
    }
+   if(target.dataset.providerDeleteKind){
+    const kind=target.dataset.providerDeleteKind;
+    const record=providerData[kind==='customers'?'customers':'users'].find(r=>r.id===target.dataset.providerId);
+    if(record){detailDialog.innerHTML=window.ClearbookProvider.deleteForm(kind,record);detailDialog.showModal();}
+   }
    if(action==='close-detail'&&!submitting)detailDialog.close();
    if(target.dataset.providerKind&&!submitting){
     submitting=true;
@@ -212,12 +217,18 @@ document.addEventListener('click', async event=>{
 document.addEventListener('input',event=>{if(event.target.name==='amount'){const preview=event.target.closest('.form-field')?.querySelector('[data-amount-words]');if(preview)preview.textContent=amountInWords(event.target.value);}if(event.target.id==='search'){search=event.target.value;pageNumber=1;render();document.querySelector('#search').focus();}});
 document.addEventListener('change',event=>{const el=event.target;if(el.dataset.filter){filters[el.dataset.filter]=el.value;pageNumber=1;render();}if(el.name==='vendor'){const p=vendor(el.value);const select=dialog.querySelector('[name="category"]');if(p&&select)select.value=p.category;}if(el.name==='receipt'){const file=el.files[0];if(file){if(file.size>10*1024*1024||!['application/pdf','image/png','image/jpeg'].includes(file.type)){el.value='';toast('Choose a PDF, PNG, or JPEG smaller than 10 MB.');return;}draft.receiptName=file.name;document.querySelector('#file-label').textContent=file.name;}}});
 document.addEventListener('submit',async event=>{
- const form=event.target;if(!['transaction-form','directory-form','category-form','location-form','client-form','reversal-form','customer-form','customer-user-form'].includes(form.id))return;
+ const form=event.target;if(!['transaction-form','directory-form','category-form','location-form','client-form','reversal-form','customer-form','customer-user-form','provider-delete-form'].includes(form.id))return;
  event.preventDefault();if(submitting)return;submitting=true;
  const submitButton=form.querySelector('button[type="submit"], button.primary');
  if(submitButton)submitButton.disabled=true;
  try {
-  if(form.id==='customer-form'||form.id==='customer-user-form'){
+  if(form.id==='provider-delete-form'){
+   if(!isProvider())throw new Error('Software-provider access is required.');
+   const kind=form.dataset.kind;
+   if(!['customers','users'].includes(kind))throw new Error('Invalid access record.');
+   await api(`/provider/${kind}/${form.dataset.id}`,{method:'DELETE'});
+   detailDialog.close();toast(kind==='customers'?'Organization access deleted. Financial history retained.':'User access deleted.');
+  }else if(form.id==='customer-form'||form.id==='customer-user-form'){
    if(!isProvider())throw new Error('Software-provider access is required.');
    const body=Object.fromEntries(new FormData(form));
    const result=await api(form.id==='customer-form'?'/provider/customers':'/provider/users',{method:'POST',body});

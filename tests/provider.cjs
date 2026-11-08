@@ -36,7 +36,13 @@ function setup(role = 'provider') {
         if(options.method==='POST')users.push({id:'user-b',email:body.email,customer_id:body.customer_id,enabled:true});
         data={items:[...users]};
       }
-      else if(endpoint==='/provider/users/user-a'){users[0].enabled=body.enabled;data=users[0];}
+      else if(endpoint==='/provider/users/user-a'){
+        if(options.method==='DELETE'){users.splice(users.findIndex(u=>u.id==='user-a'),1);data={deleted:true};}
+        else{users[0].enabled=body.enabled;data=users[0];}
+      }
+      else if(endpoint==='/provider/customers/customer-a'&&options.method==='DELETE'){
+        customers.splice(customers.findIndex(c=>c.id==='customer-a'),1);data={deleted:true};
+      }
       else if(role==='customer'&&endpoint==='/dashboard')data={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};
       else if(role==='customer'&&endpoint==='/categories')data={items:[{name:'Fuel'}]};
       else if(role==='customer')data={items:[],total:0};
@@ -78,6 +84,16 @@ function setup(role = 'provider') {
   await provider.handlers.click({target:{closest:()=>({dataset:{providerKind:'users',providerId:'user-a',providerEnabled:'false'}})}});
   assert.equal(provider.users[0].enabled,false);
   assert.ok(provider.requests.every(request=>request.endpoint==='/session'||request.endpoint.startsWith('/provider/')));
+  await provider.handlers.click({target:{closest:()=>({dataset:{providerDeleteKind:'users',providerId:'user-a'}})}});
+  assert.ok(provider.node('#detail-dialog').innerHTML.includes('provider-delete-form'));
+  assert.ok(provider.node('#detail-dialog').innerHTML.includes('user@example.com'));
+  assert.ok(provider.node('#detail-dialog').innerHTML.includes('Financial history will be retained'));
+  await provider.handlers.submit({target:{id:'provider-delete-form',dataset:{kind:'users',id:'user-a'},querySelector:()=>({disabled:false})},preventDefault(){}});
+  assert.ok(!provider.users.some(u=>u.id==='user-a'));
+  await provider.handlers.click({target:{closest:()=>({dataset:{providerDeleteKind:'customers',providerId:'customer-a'}})}});
+  assert.ok(provider.node('#detail-dialog').innerHTML.includes('Customer &lt;A&gt;'));
+  await provider.handlers.submit({target:{id:'provider-delete-form',dataset:{kind:'customers',id:'customer-a'},querySelector:()=>({disabled:false})},preventDefault(){}});
+  assert.ok(provider.requests.some(r=>r.method==='DELETE'&&r.endpoint==='/provider/customers/customer-a'));
 
   const customer=setup('customer');await customer.context.window.CLEARBOOK_READY;
   assert.ok(customer.node('#main').innerHTML.includes('Total expenses'));

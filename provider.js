@@ -7,7 +7,7 @@ window.ClearbookProvider = (() => {
   const usersIn = (users, organizationId) => users.filter(user => user.customer_id === organizationId);
 
   function statusButton(kind, record) {
-    return `<button class="button" data-provider-kind="${kind}" data-provider-id="${escape(record.id)}" data-provider-enabled="${!record.enabled}">${record.enabled ? 'Disable' : 'Enable'}</button>`;
+    return `<button class="button" data-provider-kind="${kind}" data-provider-id="${escape(record.id)}" data-provider-enabled="${!record.enabled}">${record.enabled ? 'Disable' : 'Enable'}</button><button class="button danger" data-provider-delete-kind="${kind}" data-provider-id="${escape(record.id)}">Delete</button>`;
   }
 
   function render({customers, users, page, loading, error}) {
@@ -40,5 +40,9 @@ window.ClearbookProvider = (() => {
       <div class="form-actions"><button type="button" class="button" data-action="close-detail">Cancel</button><button type="submit" class="button primary">${isUser ? 'Add user' : 'Create organization'}</button></div></form>`;
   }
 
-  return {render, form};
+  function deleteForm(kind,record){
+    const organization=kind==='customers';
+    return `<div class="modal-head"><h2 id="detail-title">Delete ${organization?'organization':'user'}?</h2><button class="close-button" data-action="close-detail" aria-label="Close confirmation">&times;</button></div><form id="provider-delete-form" data-kind="${kind}" data-id="${escape(record.id)}" class="form-body"><p>Delete access for <strong>${escape(organization?record.name:record.email)}</strong>?</p><p>${organization?'All users in this organization will lose access.':'This user will lose organization access.'} Financial history will be retained.</p><div class="form-actions"><button type="button" class="button" data-action="close-detail">Cancel</button><button type="submit" class="button danger">Delete ${organization?'organization':'user'}</button></div></form>`;
+  }
+  return {render, form, deleteForm};
 })();
