@@ -50,3 +50,12 @@ Changes load on startup, after saves and through **Refresh**. No endpoint pollin
 Deploy this frontend together with the backend provider/customer update. Providers use **Organizations / Onboard organization** and **Users / Add user** to provision access. Each organization can have up to two customer users. New users change their temporary password at first Cognito sign-in; share it privately, since invitation emails are suppressed. Existing users keep their password. Disable controls revoke application access on subsequent API requests. Providers cannot enter customer ledgers, and accounts without organization membership cannot load business data.
 
 The backend [provider access and deployment guide](../clearbook-backend/backend/README.md#provider-and-customer-access) describes storage, migration limits and deployment checks. Existing shared ledger records are not assigned to a newly onboarded organization automatically. Loopback development remains the offline demo ledger. `npm test` also covers hosted provider/customer routing, customer creation, user access controls and unassigned-account denial; hosted API/Cognito responses are mocked.
+
+
+## Clients and incoming credits
+
+Customer workspaces have a Clients directory with add/edit forms and receipt history. When adding a transaction, choose Expense, Payback or Credit. Credit requires a client, receiving business account, amount, date, payment mode and location; a receipt is optional. Use + Add client in the Credit form to onboard a client without losing entered values. Purpose / Notes remain hidden.
+
+Credits appear as Received, can be filtered by client or account, and are included in CSV exports and dashboard client receipt totals. Account cards show client credits, incoming, outgoing and net movement; net movement excludes opening balances. Existing transfers remain visible and editable under their original type, while new-entry options offer Credit in place of Transfer.
+
+Deploy the matching backend and clients table before publishing this frontend. See the sibling backend's CLIENT_CREDITS.md for deployment order. Tests exercise the real local HTTP API, including client creation and credit create/edit/reverse. Visual browser verification is separate from these DOM-stub integration tests.
