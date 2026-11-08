@@ -45,6 +45,21 @@ const {spawn} = require('node:child_process');
     vm.runInContext(source,context);
     await context.window.CLEARBOOK_READY;
     const run=code=>vm.runInContext(code,context);
+    for(const [input,expected] of [
+      ['', ''],['abc',''],['-10',''],['1.001',''],['1000000000000',''],
+      ['0','Zero rupees only'],['1','One rupee only'],['19','Nineteen rupees only'],
+      ['40','Forty rupees only'],['105','One hundred five rupees only'],
+      ['1000','One thousand rupees only'],['100000','One lakh rupees only'],
+      ['10000000','One crore rupees only'],['12345678.90','One crore twenty three lakh forty five thousand six hundred seventy eight rupees and ninety paise only'],
+      ['1.01','One rupee and one paisa only'],['0.50','Zero rupees and fifty paise only'],
+      ['999999999999.99','Ninety nine thousand nine hundred ninety nine crore ninety nine lakh ninety nine thousand nine hundred ninety nine rupees and ninety nine paise only'],
+    ])assert.equal(run(`amountInWords(${JSON.stringify(input)})`),expected);
+    const amountPreview={textContent:''};
+    const amountInput={name:'amount',value:'125000.50',closest:()=>({querySelector:()=>amountPreview})};
+    handlers.input({target:amountInput});
+    assert.equal(amountPreview.textContent,'One lakh twenty five thousand rupees and fifty paise only');
+    amountInput.value='';handlers.input({target:amountInput});
+    assert.equal(amountPreview.textContent,'');
     assert.equal(run('connected'),true);
     assert.equal(run('db.transactions.length'),28);
     assert.equal(run('summary.totals.outstanding'),83800);
@@ -132,6 +147,7 @@ const {spawn} = require('node:child_process');
     assert.ok(client,'Client creation must persist to API.');
     assert.equal(run('draft.client_id'),client.id);
     assert.equal(run('draft.amount'),'500');
+    assert.ok(node('#transaction-dialog').innerHTML.includes('Five hundred rupees only'),'Credit drafts must show words on render.');
     assert.ok(node('#transaction-dialog').innerHTML.includes('Client &lt;ABC&gt;'));
     const creditForm=form('transaction-form',{date:'2026-11-04',amount:'500',client_id:client.id,recipient:'business',mode:'UPI',location:'Client site'});
     nodes.set('#transaction-form',creditForm);
