@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..');
 const port = Number(process.env.PORT || 5173);
 const backend = new URL(process.env.CLEARBOOK_API_PROXY || 'http://127.0.0.1:8000');
 if (!['http:', 'https:'].includes(backend.protocol)) throw new Error('API proxy must use HTTP or HTTPS.');
-const assets = {'/':['index.html','text/html'], '/index.html':['index.html','text/html'],
+const assets = {'/assets/loading-avatar.png':['assets/loading-avatar.png','image/png'],'/':['index.html','text/html'], '/index.html':['index.html','text/html'],
   '/app.js':['app.js','text/javascript'], '/auth.js':['auth.js','text/javascript'], '/provider.js':['provider.js','text/javascript'], '/config.js':['config.js','text/javascript'], '/styles.css':['styles.css','text/css']};
 function error(response, status, message) {
   if (response.headersSent) return response.destroy();
@@ -38,7 +38,7 @@ const server = http.createServer((request, response) => {
   const asset=assets[incoming.pathname];
   if (request.method !== 'GET' || !asset) return error(response,404,'Not found.');
   const data=fs.readFileSync(path.join(root,asset[0]));
-  response.writeHead(200,{'Content-Type':asset[1]+'; charset=utf-8','Content-Length':data.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+  response.writeHead(200,{'Content-Type':asset[1]+(asset[1].startsWith('image/')?'':'; charset=utf-8'),'Content-Length':data.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
   response.end(data);
 });
 server.on('error', error => {console.error(error.message);process.exitCode=1;});

@@ -145,7 +145,7 @@ function openClientForm(record=null){
  captureDraft();const c=record||{};
  detailDialog.innerHTML=`<div class="modal-head"><h2 id="detail-title">${record?'Edit client':'Add client'}</h2><button class="close-button" data-action="close-detail" aria-label="Close client form">&times;</button></div><form id="client-form" data-id="${esc(c.id||'')}" class="form-body"><div class="form-grid"><label class="form-field full">Client name<input name="name" required maxlength="120" value="${esc(c.name||'')}" placeholder="e.g. ABC Constructions"></label><label class="form-field full">Contact person (optional)<input name="contact" maxlength="120" value="${esc(c.contact||'')}"></label><label class="form-field">Phone (optional)<input name="phone" type="tel" maxlength="40" value="${esc(c.phone||'')}"></label><label class="form-field">Email (optional)<input name="email" type="email" maxlength="254" value="${esc(c.email||'')}"></label></div><div class="form-actions"><button type="button" class="button" data-action="close-detail">Cancel</button><button class="button primary" type="submit">${record?'Save changes':'Add client'}</button></div></form>`;detailDialog.showModal();
 }
-function render(){if(renderAuth())return;if(isProvider()){renderProvider();return;}navigation();main.innerHTML=(!connected?`<div class="connection-banner ${loadError?'error':''}" role="status">${esc(loadError||'Loading your accounts and transactions...')} ${loadError?'<button class="button" data-action="refresh">Retry</button>':''}</div>`:loadError?`<div class="connection-banner error" role="alert">Refresh failed: ${esc(loadError)}. Showing data from the last successful refresh.</div>`:'')+(page==='overview'?`${heading('A clearer view of your money.','Your payments, people, and paybacks. All in one place.')}${metrics()}${charts()}${table()}${creditorStrip()}`:page==='transactions'?`${heading('Every payment has a story.','Track client receipts, business expenses, and repayments.','TRANSACTION LEDGER')}${table()}`:page==='creditors'?creditors():page==='clients'?clientsDirectory():directory());document.querySelector('.local-badge').textContent=loading?'Refreshing...':connected?`Updated ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`:'API disconnected';}
+function render(){if(renderAuth())return;if(!connected&&!loadError){document.body?.classList.add('account-loading');main.innerHTML=accountLoader();return;}document.body?.classList.remove('account-loading');if(isProvider()){renderProvider();return;}navigation();main.innerHTML=(!connected?`<div class="connection-banner ${loadError?'error':''}" role="status">${esc(loadError||'Loading your accounts and transactions...')} ${loadError?'<button class="button" data-action="refresh">Retry</button>':''}</div>`:loadError?`<div class="connection-banner error" role="alert">Refresh failed: ${esc(loadError)}. Showing data from the last successful refresh.</div>`:'')+(page==='overview'?`${heading('A clearer view of your money.','Your payments, people, and paybacks. All in one place.')}${metrics()}${charts()}${table()}${creditorStrip()}`:page==='transactions'?`${heading('Every payment has a story.','Track client receipts, business expenses, and repayments.','TRANSACTION LEDGER')}${table()}`:page==='creditors'?creditors():page==='clients'?clientsDirectory():directory());document.querySelector('.local-badge').textContent=loading?'Refreshing...':connected?`Updated ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`:'API disconnected';}
 function route(){const key=location.hash.slice(1)||'overview';page=['overview','transactions','creditors','vendors','accounts','clients','customers','users'].includes(key)?key:'overview';pageNumber=1;render();}
 window.addEventListener('hashchange',route);
 function options(list,selected){return list.map(a=>`<option value="${esc(a.id)}" ${selected===a.id?'selected':''}>${esc(a.name)}</option>`).join('');}
@@ -277,8 +277,10 @@ function renderProvider(){
  main.innerHTML=window.ClearbookProvider.render({...providerData,page,loading,error:loadError});
  document.querySelector('.local-badge').textContent=loading?'Refreshing...':'Provider console';
 }
+function accountLoader(){return `<section class="account-loader" role="status" aria-live="polite" aria-label="Loading your account"><div class="loader-avatar"><span class="loader-ring" aria-hidden="true"></span><img src="assets/loading-avatar.png" width="144" height="144" alt="" fetchpriority="high"></div><p>Loading<span class="loader-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></section>`;}
 function renderAuth(){
  const auth=window.ClearbookAuth;
+ document.body?.classList.toggle('account-loading',Boolean(auth?.enabled&&auth.isSignedIn()&&!workspaceSession&&!loadError));
  if(!auth?.enabled)return false;
  const signed=auth.isSignedIn();
  document.body.classList.toggle('signed-out',!signed);
@@ -289,7 +291,7 @@ function renderAuth(){
   return true;
  }
  if(!workspaceSession){
-  main.innerHTML=`<section class="auth-card"><div class="eyebrow">CLEARBOOK</div><h1>${loadError?'Account access unavailable':'Loading your account...'}</h1><p role="status">${esc(loadError||'Checking your workspace access.')}</p><button class="button" data-action="refresh">Retry</button><button class="button" data-action="sign-out">Sign out</button></section>`;
+  main.innerHTML=loadError?`<section class="auth-card"><div class="eyebrow">CLEARBOOK</div><h1>Account access unavailable</h1><p role="alert">${esc(loadError)}</p><button class="button" data-action="refresh">Retry</button><button class="button" data-action="sign-out">Sign out</button></section>`:accountLoader();
   document.querySelector('#navigation').innerHTML='';
   return true;
  }

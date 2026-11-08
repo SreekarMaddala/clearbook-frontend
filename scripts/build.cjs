@@ -13,4 +13,5 @@ for(const filename of ['index.html','app.js','auth.js','provider.js','styles.css
   }
   fs.writeFileSync(path.join(out,filename),data);
 }
+fs.cpSync(path.join(root,'assets'),path.join(out,'assets'),{recursive:true});
 console.log('Static frontend built in dist/.');

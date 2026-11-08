@@ -18,3 +18,17 @@
 .status.received{background:#e4f2e8;color:#245a3c}
 
 .form-field .amount-words{display:block;color:var(--green);font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}.amount-words:empty{display:none}
+
+body.account-loading .sidebar,body.account-loading .topbar,body.account-loading footer{display:none}
+body.account-loading .main-shell{margin-left:0}
+body.account-loading main{padding:0}
+.account-loader{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;background:#f7f8f5}
+.loader-avatar{position:relative;width:160px;height:160px;display:grid;place-items:center}
+.loader-avatar img{position:relative;z-index:1;object-fit:contain;animation:loader-float 2.2s ease-in-out infinite}
+.loader-ring{position:absolute;inset:0;border:3px solid #e0e8dc;border-top-color:var(--green);border-right-color:#94ad7a;border-radius:50%;animation:loader-spin 1.5s linear infinite}
+.account-loader p{margin:0;color:var(--green);font-size:14px;letter-spacing:.04em}
+.loader-dots span{display:inline-block;animation:loader-dot 1.2s ease-in-out infinite}.loader-dots span:nth-child(2){animation-delay:.2s}.loader-dots span:nth-child(3){animation-delay:.4s}
+@keyframes loader-spin{to{transform:rotate(360deg)}}
+@keyframes loader-float{0%,100%{transform:translateY(2px)}50%{transform:translateY(-6px)}}
+@keyframes loader-dot{0%,80%,100%{opacity:.25}40%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.loader-ring,.loader-avatar img,.loader-dots span{animation:none}}

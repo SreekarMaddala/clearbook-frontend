@@ -20,7 +20,7 @@ function setup(role = 'provider') {
   const context = vm.createContext({
     Intl, Date, URL, URLSearchParams, AbortSignal, setTimeout, clearTimeout,
     location:{hash:''}, window:{ClearbookAuth:auth, CLEARBOOK_CONFIG:{apiBase:'/api'}, addEventListener(){}},
-    document:{body:{classList:{toggle(){}}},querySelector:node,addEventListener:(name,fn)=>{handlers[name]=fn;}},
+    document:{body:{classList:{toggle(){},add(){},remove(){}}},querySelector:node,addEventListener:(name,fn)=>{handlers[name]=fn;}},
     FormData:class {constructor(form){this.fields=form.fields;}[Symbol.iterator](){return Object.entries(this.fields)[Symbol.iterator]();}},
     fetch:async(url,options)=>{
       const endpoint = url.slice(4); requests.push({endpoint, method:options.method});

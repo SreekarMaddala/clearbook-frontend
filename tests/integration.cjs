@@ -27,7 +27,7 @@ const {spawn} = require('node:child_process');
       server.on('exit', code=>{clearTimeout(timer);reject(new Error(`Test server exited ${code}: ${serverError}`));});
     });
     await frontendReady;
-    for (const file of ['/', '/app.js', '/config.js', '/styles.css']) {
+    for (const file of ['/', '/app.js', '/config.js', '/styles.css', '/assets/loading-avatar.png']) {
       assert.equal((await fetch(`http://127.0.0.1:${port}${file}`)).status,200);
     }
     assert.equal((await fetch(`http://127.0.0.1:${port}/backend/seed.json`)).status,404);
