@@ -59,3 +59,8 @@ Customer workspaces have a Clients directory with add/edit forms and receipt his
 Credits appear as Received, can be filtered by client or account, and are included in CSV exports and dashboard client receipt totals. Account cards show client credits, incoming, outgoing and net movement; net movement excludes opening balances. Existing transfers remain visible and editable under their original type, while new-entry options offer Credit in place of Transfer.
 
 Deploy the matching backend and clients table before publishing this frontend. See the sibling backend's CLIENT_CREDITS.md for deployment order. Tests exercise the real local HTTP API, including client creation and credit create/edit/reverse. Visual browser verification is separate from these DOM-stub integration tests.
+
+
+## Location dropdown
+
+Every transaction form includes a required Location dropdown and + Add location. Adding a location preserves the transaction draft, saves the location to the workspace and selects it immediately. Historical transaction locations are available automatically; filters also include saved locations. Deploy the backend's GET/POST /api/locations routes before this frontend. No new physical DynamoDB table is needed.
