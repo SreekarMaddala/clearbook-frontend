@@ -8,7 +8,7 @@ const port = Number(process.env.PORT || 5173);
 const backend = new URL(process.env.CLEARBOOK_API_PROXY || 'http://127.0.0.1:8000');
 if (!['http:', 'https:'].includes(backend.protocol)) throw new Error('API proxy must use HTTP or HTTPS.');
 const assets = {'/assets/loading-avatar.png':['assets/loading-avatar.png','image/png'],'/':['index.html','text/html'], '/index.html':['index.html','text/html'],
-  '/app.js':['app.js','text/javascript'], '/auth.js':['auth.js','text/javascript'], '/provider.js':['provider.js','text/javascript'], '/config.js':['config.js','text/javascript'], '/styles.css':['styles.css','text/css']};
+  '/analytics.js':['analytics.js','text/javascript'], '/analytics.css':['analytics.css','text/css'], '/app.js':['app.js','text/javascript'], '/auth.js':['auth.js','text/javascript'], '/provider.js':['provider.js','text/javascript'], '/config.js':['config.js','text/javascript'], '/styles.css':['styles.css','text/css']};
 function error(response, status, message) {
   if (response.headersSent) return response.destroy();
   response.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});

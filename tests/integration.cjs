@@ -27,7 +27,7 @@ const {spawn} = require('node:child_process');
       server.on('exit', code=>{clearTimeout(timer);reject(new Error(`Test server exited ${code}: ${serverError}`));});
     });
     await frontendReady;
-    for (const file of ['/', '/app.js', '/config.js', '/styles.css', '/assets/loading-avatar.png']) {
+    for (const file of ['/', '/app.js', '/analytics.js', '/analytics.css', '/config.js', '/styles.css', '/assets/loading-avatar.png']) {
       assert.equal((await fetch(`http://127.0.0.1:${port}${file}`)).status,200);
     }
     assert.equal((await fetch(`http://127.0.0.1:${port}/backend/seed.json`)).status,404);
@@ -42,6 +42,7 @@ const {spawn} = require('node:child_process');
     });
     const source=fs.readFileSync(path.join(root,'app.js'),'utf8');
     assert.ok(!source.includes('setInterval('));
+    vm.runInContext(fs.readFileSync(path.join(root,'analytics.js'),'utf8'),context);
     vm.runInContext(source,context);
     await context.window.CLEARBOOK_READY;
     const run=code=>vm.runInContext(code,context);
@@ -60,14 +61,26 @@ const {spawn} = require('node:child_process');
     assert.equal(amountPreview.textContent,'One lakh twenty five thousand rupees and fifty paise only');
     amountInput.value='';handlers.input({target:amountInput});
     assert.equal(amountPreview.textContent,'');
-    assert.equal(run('connected'),true);
+    assert.equal(run('connected'),true,run('loadError'));
     assert.equal(run('db.transactions.length'),28);
     assert.equal(run('summary.totals.outstanding'),83800);
     assert.ok(node('#main').innerHTML.includes('data-action="refresh"'));
     const count=requests.length;
-    for(const page of ['overview','transactions','creditors','vendors','accounts','clients']){run(`page='${page}';render()`);assert.ok(node('#main').innerHTML.length>1000);}
+    for(const page of ['overview','analytics','transactions','creditors','vendors','accounts','clients']){run(`page='${page}';render()`);assert.ok(node('#main').innerHTML.length>1000);}
     assert.equal(requests.length,count,'Rendering/navigation must not poll the API.');
-    async function submit(form) {await handlers.submit({target:form,preventDefault(){}});}
+    run("location.hash='#analytics';route()");
+    assert.equal(run('page'),'analytics');
+    assert.ok(node('#navigation').innerHTML.includes('href="#analytics" class="active"'));
+    assert.ok(node('#main').innerHTML.includes('Business account movement'));
+    assert.ok(node('#main').innerHTML.includes('Transaction explorer'));
+    handlers.change({target:{dataset:{anSetting:'type'},value:'EXPENSE'}});
+    assert.ok(node('#main').innerHTML.includes('value="EXPENSE" selected'));
+    await handlers.click({target:{closest:()=>({dataset:{anAction:'reset'}})}});
+    assert.equal(requests.length,count,'Analytics filtering and customization must use the loaded workspace snapshot.');
+    async function submit(form) {
+      await handlers.submit({target:form,preventDefault(){}});
+      assert.match(node('#toast').textContent, /saved\.|updated\.|added\.|reversed\./, `${form.id}: ${node('#toast').textContent}`);
+    }
     const button={disabled:false};
     const form=(id,fields,dataset={})=>({id,fields,dataset,querySelector(){return button;}});
     await submit(form('directory-form',{name:'Integration supplier',category:'Power Tools',description:'Tools'}, {kind:'vendor',id:''}));
@@ -215,7 +228,7 @@ const {spawn} = require('node:child_process');
     assert.equal(run('summary.totals.credits'),0);
     assert.equal(run('summary.totals.expenses'),expensesBefore);
     assert.equal(run('summary.totals.outstanding'),owedBefore);
-    console.log('PASS: real HTTP startup, six views, clients, incoming credit create/edit/reverse, vendor creation, expense create/edit/reverse, required location, manual refresh, and no render-triggered requests.');
+    console.log('PASS: real HTTP startup, seven views including analytics, clients, incoming credit create/edit/reverse, vendor creation, expense create/edit/reverse, required location, manual refresh, and no render-triggered requests.');
   } finally {
     const exited=[server,frontend].map(child=>child.exitCode!==null?Promise.resolve():new Promise(resolve=>child.once('exit',resolve)));
     server.kill();frontend.kill();

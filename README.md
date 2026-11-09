@@ -64,3 +64,17 @@ Deploy the matching backend and clients table before publishing this frontend. S
 ## Location dropdown
 
 Every transaction form includes a required Location dropdown and + Add location. Adding a location preserves the transaction draft, saves the location to the workspace and selects it immediately. Historical transaction locations are available automatically; filters also include saved locations. Deploy the backend's GET/POST /api/locations routes before this frontend. No new physical DynamoDB table is needed.
+
+## Analytics
+
+Open **Analytics** in the workspace navigation, or visit `/#analytics`. This separate page uses the complete paginated ledger snapshot already loaded by the app. Changing filters, charts or saved views makes no API requests; **Refresh** loads current data. No backend deployment or additional table is required.
+
+The page includes client credits, expenses, credits less expenses, net account movement, period comparisons, daily/weekly/monthly charts, breakdowns by category/vendor/client/location/account/payment mode, location performance, client and vendor rankings, business account movement, and a searchable transaction explorer with sorting, pagination and record details. Date presets include the Indian financial year starting April 1. Long chart ranges automatically use a coarser grouping and show the effective grouping; the chart data table provides exact values.
+
+**Customize** shows or hides six panels and saves up to 12 named views. Views and layout preferences are stored in this browser's localStorage under the workspace ID; they contain filters and presentation settings, not transaction records. They do not sync across devices. Saving an existing view name updates that view. **Reset filters** keeps the selected layout; **Restore default layout** restores panels and chart settings.
+
+Exports include all records matching the analytics filters, or the current breakdown. The transaction explorer's own export also respects its selected group and search, across all pages. CSV cells are escaped, including spreadsheet formula prefixes. Purpose/notes remain hidden and are not included in analytics exports.
+
+Calculations use integer paise and exclude reversals. Paybacks do not count as expenses. Externally paid expenses are included in spending without reducing business account funds. Internal transfers cancel in consolidated cash flow and appear as movement on the individual accounts. Net account movement excludes opening balances, and credits less expenses is not accounting profit. Comparisons use the preceding period of the same duration with the same filters. Composite location names remain a single group.
+
+The feature lives in `analytics.js` and `analytics.css`, separate from the existing app. `npm test` covers monetary calculations, comparisons, filters, export escaping, saved views and workspace isolation; `npm run test:integration` covers navigation, rendering and event wiring against an isolated local API. The build includes both assets.
