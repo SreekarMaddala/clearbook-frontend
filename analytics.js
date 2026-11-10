@@ -10,7 +10,7 @@
   const DIMENSIONS = {category:'Category', vendor:'Vendor', client:'Client', location:'Location', account:'Business account', mode:'Payment mode'};
   const PERIODS = {all:'All time', month:'This month', lastMonth:'Last month', quarter:'This quarter', financialYear:'Financial year', last90:'Last 90 days', custom:'Custom dates'};
   const METRICS = {expenses:'Debits', credits:'Client credits', paybacks:'Paybacks', volume:'Transaction value'};
-  const WIDGETS = {trend:'Money over time', breakdown:'Breakdown explorer', locations:'Location performance', relationships:'Clients & vendors', accounts:'Business accounts', ledger:'Transaction explorer'};
+  const WIDGETS = {cumulative:'Cumulative credits & debits', methods:'Payment methods', activity:'Payment activity', trend:'Money over time', breakdown:'Breakdown explorer', locations:'Location performance', relationships:'Clients & vendors', accounts:'Business accounts', ledger:'Transaction explorer'};
   const COLORS = ['#315f4b','#8da97a','#ba9161','#7395a7','#8d7aa4','#b97963','#729a8a','#b4ab70'];
   const defaults = () => ({period:'month', month:'', from:'', to:'', account:'', client:'', vendor:'', category:'', location:'', mode:'', type:'', group:'month', dimension:'category', metric:'expenses', chart:'cashflow', compare:true, widgets:Object.keys(WIDGETS), search:'', sort:'date-desc', ledgerPage:1, advanced:false, customize:false});
   const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -176,7 +176,7 @@
     let settings=defaults(), views=[], scope=null, context=null, report=null, drill=null;
     const storageKey=()=>`clearbook.analytics.v1.${scope}`;
     const persist=()=>{
-      try { window.localStorage.setItem(storageKey(),JSON.stringify({dateModeVersion:2,settings:sanitize(settings),views})); }
+      try { window.localStorage.setItem(storageKey(),JSON.stringify({dateModeVersion:2,visualVersion:1,settings:sanitize(settings),views})); }
       catch { /* A browser with storage disabled can still use the page. */ }
     };
     function loadScope(workspace) {
@@ -186,6 +186,7 @@
         const saved=JSON.parse(window.localStorage.getItem(storageKey())||'null');
         if (saved) {
           settings=sanitize(saved.settings);
+          if (saved.visualVersion!==1 && settings.widgets.length) settings.widgets=[...new Set([...settings.widgets,'cumulative','methods','activity'])];
           if (saved.dateModeVersion!==2) Object.assign(settings,{period:'month',month:'',from:'',to:''});
           views=Array.isArray(saved.views)?saved.views.slice(0,12).filter(v=>typeof v.name==='string'&&typeof v.id==='string').map(v=>({id:v.id.slice(0,80),name:v.name.slice(0,48),settings:sanitize(v.settings)})):[];
         }
@@ -221,15 +222,42 @@
       const a=report.current[key], b=report.prior[key];
       if (!b) return `<span class="an-delta neutral">${a?'No previous activity':'No change'}</span>`;
       const delta=a-b;
-      const sign=delta>0?'+':'';
-      const result=b>0?`${sign}${(delta/Math.abs(b)*100).toLocaleString('en-IN',{maximumFractionDigits:1})}%`:`${sign}${money(delta)}`;
+      const result=b>0?`${(Math.abs(delta)/Math.abs(b)*100).toLocaleString('en-IN',{maximumFractionDigits:1})}% ${delta>0?'higher':delta<0?'lower':'change'}`:money(Math.abs(delta));
       return `<span class="an-delta ${delta===0?'neutral':key==='expenses'?(delta>0?'down':'up'):(delta>0?'up':'down')}">${delta>0?'↗':delta<0?'↘':'—'} ${result}</span><span class="an-delta-label">vs previous period</span>`;
     }
 
     function kpis() {
       const c=report.current;
-      const list=[['credits','Client credits','Money received from your clients','↙'],['expenses','Total debits','Business and externally funded debits','↗'],['operating','Credits less debits','Receipts minus debits · not accounting profit','≈'],['net','Net account movement','Business inflows minus outflows · excludes opening balance','⇄']];
-      return `<div class="an-kpis">${list.map(([key,label,hint,symbol])=>`<section class="an-kpi ${key==='net'?'an-kpi-featured':''}"><div class="an-kpi-label">${label}<span>${symbol}</span></div><strong>${money(c[key])}</strong><div class="an-kpi-delta">${comparison(key)}</div><p>${hint}</p></section>`).join('')}</div>`;
+      const list=[['credits','Client credits','Money received from your clients','↙'],['expenses','Total debits','Business and externally funded debits','↗'],['paybacks','Total paybacks','Payments returned to external creditors','↶'],['count','Transactions','Recorded payments in this view','#']];
+      return `<div class="an-kpis">${list.map(([key,label,hint,symbol])=>`<section class="an-kpi ${key==='count'?'an-kpi-featured':''}"><div class="an-kpi-label">${label}<span>${symbol}</span></div><strong>${key==='count'?c.count.toLocaleString('en-IN'):money(c[key])}</strong><div class="an-kpi-delta">${comparison(key)}</div><p>${hint}</p></section>`).join('')}</div>`;
+    }
+
+    function visualBuckets() {
+      const days=Math.round((date(report.range.to)-date(report.range.from))/DAY)+1;
+      return series(report.rows,report.range,days<=93?'day':report.group,new Map(context.data.accounts.map(a=>[a.id,a])),settings.account);
+    }
+
+    function cumulativePanel() {
+      const buckets=visualBuckets();
+      let credits=0,debits=0;
+      const points=[{date:report.range.from,credits:0,debits:0},...buckets.map(b=>({date:b.date,credits:credits+=b.credits,debits:debits+=b.expenses}))];
+      const width=700,height=240,left=65,right=20,top=18,bottom=200;
+      const max=Math.max(1,credits,debits), x=i=>left+i/(points.length-1)*(width-left-right), y=value=>bottom-value/max*(bottom-top);
+      const line=key=>points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(2)},${y(p[key]).toFixed(2)}`).join(' ');
+      const svg=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Cumulative client credits and debits across the selected dates"><title>Cumulative credits and debits</title>${[0,.25,.5,.75,1].map(f=>`<line x1="${left}" y1="${y(max*f)}" x2="${width-right}" y2="${y(max*f)}" stroke="#e3e9df" stroke-dasharray="3 5"/><text x="${left-10}" y="${y(max*f)+4}" text-anchor="end" class="an-axis">${compactMoney(max*f)}</text>`).join('')}<path d="${line('debits')} L${width-right},${bottom} L${left},${bottom} Z" fill="#c8b48f" fill-opacity=".14"/><path d="${line('credits')}" fill="none" stroke="#315f4b" stroke-width="3" stroke-linejoin="round"/><path d="${line('debits')}" fill="none" stroke="#b18c53" stroke-width="3" stroke-linejoin="round"/>${points.filter((p,i)=>i===points.length-1||i>0&&i%Math.max(1,Math.ceil(points.length/10))===0).map(p=>{const i=points.indexOf(p);return `<g><title>${escape(labelDate(p.date))}: credits ${money(p.credits)}, debits ${money(p.debits)}</title><circle cx="${x(i)}" cy="${y(p.credits)}" r="4" fill="#315f4b"/><circle cx="${x(i)}" cy="${y(p.debits)}" r="4" fill="#b18c53"/></g>`;}).join('')}<text x="${left}" y="227" class="an-axis">${escape(labelDate(report.range.from))}</text><text x="${width-right}" y="227" text-anchor="end" class="an-axis">${escape(labelDate(report.range.to))}</text></svg>`;
+      return `<section class="panel an-cumulative"><div class="an-section-head"><div><span class="an-overline">THE RUNNING PICTURE</span><h2>Credits & debits over time</h2><p>Running totals from the start of your selected period.</p></div></div><div class="an-chart-legend"><span><i></i>Client credits</span><span><i></i>Debits</span></div>${report.rows.length?`<div class="an-line-chart">${svg}</div>`:empty('No activity in this period')}<div class="an-visual-totals"><div><span>Client credits</span><strong>${money(credits)}</strong></div><div><span>Total debits</span><strong>${money(debits)}</strong></div></div></section>`;
+    }
+
+    function methodsPanel() {
+      const groups=breakdown(report.rows,'mode','expenses',context.data);
+      return `<section class="panel an-methods"><div class="an-section-head"><div><span class="an-overline">HOW YOU PAY</span><h2>Payment methods</h2><p>Debit amounts by payment method. Select one to filter this view.</p></div></div>${groups.length?`<div class="an-method-bars">${groups.map((g,i)=>`<button type="button" data-an-action="mode" data-an-value="${escape(g.key)}" aria-pressed="${settings.mode===g.key}"><span class="an-method-label"><strong>${escape(g.name)}</strong><b>${money(g.value)}</b></span><span class="an-method-track"><i style="width:${g.share}%;background:${COLORS[i%COLORS.length]}"></i></span><span class="an-method-caption">${g.count} payment${g.count===1?'':'s'} <span>${g.share.toFixed(1)}%</span></span></button>`).join('')}</div>`:empty('No debit payments in this period')}</section>`;
+    }
+
+    function activityPanel() {
+      const buckets=visualBuckets(),max=Math.max(1,...buckets.map(b=>b.count)),daily=Math.round((date(report.range.to)-date(report.range.from))/DAY)+1<=93;
+      const active=buckets.filter(b=>b.count).length;
+      const offset=daily?(date(buckets[0].date).getUTCDay()+6)%7:0;
+      return `<section class="panel an-activity"><div class="an-section-head"><div><span class="an-overline">YOUR PAYMENT RHYTHM</span><h2>Payment activity</h2><p>${daily?'Daily':'Grouped'} payment counts. Select a tile to see its transactions.</p></div><div class="an-activity-summary"><strong>${active}</strong><span>active ${daily?'days':'periods'}</span></div></div><div class="an-activity-body">${daily?'<div class="an-weekdays">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>`<span>${day}</span>`).join('')+'</div>':''}<div class="an-heatmap ${daily?'':'an-heatmap-periods'}">${Array.from({length:offset},()=>'<span aria-hidden="true"></span>').join('')}${buckets.map((b,i)=>`<button type="button" data-an-action="activity" data-an-index="${i}" ${b.count?'':'disabled'} class="an-heat-cell an-heat-${b.count?Math.min(4,Math.ceil(b.count/max*4)):0}" title="${escape(labelDate(b.date))}: ${b.count} payments; debits ${money(b.expenses)}" aria-label="${escape(labelDate(b.date))}: ${b.count} payments, debits ${money(b.expenses)}"><span>${daily?Number(b.date.slice(8)):escape(labelDate(b.date))}</span><strong>${b.count}</strong></button>`).join('')}</div><div class="an-heat-legend"><span>Fewer payments</span>${[0,1,2,3,4].map(level=>`<i class="an-heat-${level}"></i>`).join('')}<span>More payments</span></div></div></section>`;
     }
 
     function trend() {
@@ -242,7 +270,7 @@
       const yFor=value=>bottom-value/maxScale*(bottom-y);
       const labelEvery=Math.max(1,Math.ceil(buckets.length/12));
       const svg=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${labels.join(' and ')} by ${report.group}; exact values are available below" style="min-width:${width}px"><title>${escape(labels.join(' and '))} over the selected period</title>${[0,0.25,0.5,0.75,1].map(f=>`<line x1="${x}" y1="${yFor(maxScale*f)}" x2="${width-15}" y2="${yFor(maxScale*f)}" stroke="#e9eee7" stroke-dasharray="${f?'3 5':'0'}"/><text x="${x-9}" y="${yFor(maxScale*f)+4}" text-anchor="end" class="an-axis">${compactMoney(maxScale*f)}</text>`).join('')}${buckets.map((p,i)=>{const left=x+i*bucketWidth+bucketWidth*0.17, bar=Math.max(1,bucketWidth*0.26);const l=date(p.date).toLocaleDateString('en-IN',report.group==='month'?{month:'short',year:'2-digit',timeZone:'UTC'}:{day:'numeric',month:'short',timeZone:'UTC'});return `<g><title>${escape(labelDate(p.date))}: ${labels[0]} ${money(p[a])}; ${labels[1]} ${money(p[b])}</title><rect x="${left}" y="${yFor(p[a])}" width="${bar}" height="${bottom-yFor(p[a])}" rx="2" fill="#315f4b"/><rect x="${left+bar+2}" y="${yFor(p[b])}" width="${bar}" height="${bottom-yFor(p[b])}" rx="2" fill="#c8b48f"/>${i%labelEvery===0?`<text x="${left+bar}" y="207" text-anchor="middle" class="an-axis">${escape(l)}</text>`:''}</g>`;}).join('')}</svg>`;
-      return `<section class="panel an-trend"><div class="an-section-head"><div><span class="an-overline">THE BIG PICTURE</span><h2>Money over time</h2><p>${isFlow?'Movement through your business accounts':'Client receipts alongside all recorded debits'}</p></div><div class="an-inline-selects">${select('chart','Measure',[['cashflow','Account cash flow'],['activity','Credits & debits']],settings.chart)}${select('group','Group by',[['day','Day'],['week','Week'],['month','Month']],settings.group)}</div></div><div class="an-chart-legend"><span><i></i>${labels[0]}</span><span><i></i>${labels[1]}</span><small>${report.group!==settings.group?`Grouped by ${report.group} to keep this range readable`:`${buckets.length} ${report.group}${buckets.length===1?'':'s'}`}</small></div>${report.rows.length?`<div class="an-chart-scroll" tabindex="0" aria-label="Scroll chart horizontally">${svg}</div>`:empty('No activity in this period')}<div class="an-trend-foot"><div><span>${labels[0]}</span><strong>${money(report.current[a])}</strong></div><div><span>${labels[1]}</span><strong>${money(report.current[b])}</strong></div><div><span>${isFlow?'Net movement':'Credits less debits'}</span><strong>${money(report.current[a]-report.current[b])}</strong></div></div><details class="an-chart-details"><summary>View chart data</summary><div class="table-scroll"><table><thead><tr><th>PERIOD START</th><th>${labels[0].toUpperCase()}</th><th>${labels[1].toUpperCase()}</th><th>TRANSACTIONS</th></tr></thead><tbody>${buckets.map(p=>`<tr><td>${labelDate(p.date)}</td><td>${money(p[a])}</td><td>${money(p[b])}</td><td>${p.count}</td></tr>`).join('')}</tbody></table></div></details></section>`;
+      return `<section class="panel an-trend"><div class="an-section-head"><div><span class="an-overline">THE BIG PICTURE</span><h2>Money over time</h2><p>${isFlow?'Movement through your business accounts':'Client receipts alongside all recorded debits'}</p></div><div class="an-inline-selects">${select('chart','Measure',[['cashflow','Account cash flow'],['activity','Credits & debits']],settings.chart)}${select('group','Group by',[['day','Day'],['week','Week'],['month','Month']],settings.group)}</div></div><div class="an-chart-legend"><span><i></i>${labels[0]}</span><span><i></i>${labels[1]}</span><small>${report.group!==settings.group?`Grouped by ${report.group} to keep this range readable`:`${buckets.length} ${report.group}${buckets.length===1?'':'s'}`}</small></div>${report.rows.length?`<div class="an-chart-scroll" tabindex="0" aria-label="Scroll chart horizontally">${svg}</div>`:empty('No activity in this period')}<div class="an-trend-foot"><div><span>${labels[0]}</span><strong>${money(report.current[a])}</strong></div><div><span>${labels[1]}</span><strong>${money(report.current[b])}</strong></div></div><details class="an-chart-details"><summary>View chart data</summary><div class="table-scroll"><table><thead><tr><th>PERIOD START</th><th>${labels[0].toUpperCase()}</th><th>${labels[1].toUpperCase()}</th><th>TRANSACTIONS</th></tr></thead><tbody>${buckets.map(p=>`<tr><td>${labelDate(p.date)}</td><td>${money(p[a])}</td><td>${money(p[b])}</td><td>${p.count}</td></tr>`).join('')}</tbody></table></div></details></section>`;
     }
 
     function breakdownPanel() {
@@ -266,7 +294,7 @@
     }
 
     function locationPanel() {
-      return `<section class="panel"><div class="an-section-head"><div><span class="an-overline">ACROSS YOUR SITES</span><h2>Location performance</h2><p>Receipts, costs and movement for every location in this view.</p></div></div><div class="table-scroll"><table class="an-data-table"><thead><tr><th>LOCATION</th><th>CLIENT CREDITS</th><th>DEBITS</th><th>CREDITS − DEBITS</th><th>PAYBACKS</th><th>NET MOVEMENT</th><th>COUNT</th></tr></thead><tbody>${report.locations.map(g=>`<tr><td><button class="an-table-link" data-an-action="location" data-an-value="${escape(g.key)}">${escape(g.name)} ↗</button></td><td>${money(g.credits)}</td><td>${money(g.expenses)}</td><td class="${g.operating<0?'an-negative':''}">${money(g.operating)}</td><td>${money(g.paybacks)}</td><td>${money(g.net)}</td><td>${g.count}</td></tr>`).join('')}</tbody></table></div>${report.locations.length?'':empty('No location activity')}<div class="an-explainer">Location labels match your transaction records. Shared labels such as “Central” or “Jubilee Hills / Madnoor” remain together.</div></section>`;
+      return `<section class="panel"><div class="an-section-head"><div><span class="an-overline">ACROSS YOUR SITES</span><h2>Location performance</h2><p>Receipts, costs and movement for every location in this view.</p></div></div><div class="table-scroll"><table class="an-data-table"><thead><tr><th>LOCATION</th><th>CLIENT CREDITS</th><th>DEBITS</th><th>PAYBACKS</th><th>COUNT</th></tr></thead><tbody>${report.locations.map(g=>`<tr><td><button class="an-table-link" data-an-action="location" data-an-value="${escape(g.key)}">${escape(g.name)} ↗</button></td><td>${money(g.credits)}</td><td>${money(g.expenses)}</td><td>${money(g.paybacks)}</td><td>${g.count}</td></tr>`).join('')}</tbody></table></div>${report.locations.length?'':empty('No location activity')}<div class="an-explainer">Location labels match your transaction records. Shared labels such as “Central” or “Jubilee Hills / Madnoor” remain together.</div></section>`;
     }
 
     function relationships() {
@@ -275,7 +303,7 @@
     }
 
     function accountPanel() {
-      return `<section class="panel"><div class="an-section-head"><div><span class="an-overline">FOLLOW THE FUNDS</span><h2>Business account movement</h2><p>Actual inflows and outflows. Opening balances are not included.</p></div></div><div class="an-account-grid">${report.accounts.map(a=>`<button class="an-account-card" data-an-action="account" data-an-value="${escape(a.id)}"><span class="an-account-icon">⇄</span><strong>${escape(a.name)}</strong><div><span>Money in</span><b>${money(a.incoming)}</b></div><div><span>Money out</span><b>${money(a.outgoing)}</b></div><div class="an-account-net"><span>Net movement</span><b>${money(a.net)}</b></div><small>${a.count} transaction${a.count===1?'':'s'} · explore account ↗</small></button>`).join('')}</div>${report.accounts.length?'':empty('No business account selected','Choose a business account or reset the account filter.')}<div class="an-explainer">Internal transfers appear on each account. They cancel out in consolidated cash flow. Debits paid by an external creditor count as debits without reducing business account funds.</div></section>`;
+      return `<section class="panel"><div class="an-section-head"><div><span class="an-overline">FOLLOW THE FUNDS</span><h2>Business account movement</h2><p>Actual inflows and outflows. Opening balances are not included.</p></div></div><div class="an-account-grid">${report.accounts.map(a=>`<button class="an-account-card" data-an-action="account" data-an-value="${escape(a.id)}"><span class="an-account-icon">⇄</span><strong>${escape(a.name)}</strong><div><span>Money in</span><b>${money(a.incoming)}</b></div><div><span>Money out</span><b>${money(a.outgoing)}</b></div><small>${a.count} transaction${a.count===1?'':'s'} · explore account ↗</small></button>`).join('')}</div>${report.accounts.length?'':empty('No business account selected','Choose a business account or reset the account filter.')}<div class="an-explainer">Internal transfers appear on each account. They cancel out in consolidated cash flow. Debits paid by an external creditor count as debits without reducing business account funds.</div></section>`;
     }
 
     function ledger() {
@@ -299,8 +327,8 @@
       context=nextContext;
       loadScope(context.workspaceId||'local');
       report=buildReport(context.data,settings,context.today);
-      const panels={trend,breakdown:breakdownPanel,locations:locationPanel,relationships,accounts:accountPanel,ledger};
-      const main=report.error?`<p class="an-error" role="alert">${escape(report.error)}</p>`:`<div class="an-range-caption"><span>${rangeLabel(report.range)}</span>${settings.compare?`<span>Comparing ${rangeLabel(report.previousRange)}</span>`:''}</div>${kpis()}${report.rows.length?insights():empty('A fresh view is waiting','No transactions match these filters. Reset filters or choose another date range.')}<div class="an-primary-grid">${settings.widgets.includes('trend')?trend():''}${settings.widgets.includes('breakdown')?breakdownPanel():''}</div><div class="an-sections">${settings.widgets.filter(k=>!['trend','breakdown'].includes(k)).map(k=>panels[k]()).join('')}</div>${!settings.widgets.length?empty('Your summary is ready','Use Customize to add charts, breakdowns and the transaction explorer.'):''}<div class="an-methodology"><strong>A clear basis for every number.</strong><p>Reversed transactions are excluded. Paybacks reduce creditor liabilities and are never counted as another debit. Credits less debits is a receipts-based comparison, not accounting profit. Comparisons use the immediately preceding period of the same length with the same filters. Net movement excludes opening balances.</p></div>`;
+      const panels={cumulative:cumulativePanel,methods:methodsPanel,activity:activityPanel,trend,breakdown:breakdownPanel,locations:locationPanel,relationships,accounts:accountPanel,ledger};
+      const main=report.error?`<p class="an-error" role="alert">${escape(report.error)}</p>`:`<div class="an-range-caption"><span>${rangeLabel(report.range)}</span>${settings.compare?`<span>Comparing ${rangeLabel(report.previousRange)}</span>`:''}</div>${kpis()}${report.rows.length?insights():empty('A fresh view is waiting','No transactions match these filters. Reset filters or choose another date range.')}<div class="an-visual-grid">${settings.widgets.includes('cumulative')?cumulativePanel():''}${settings.widgets.includes('methods')?methodsPanel():''}</div>${settings.widgets.includes('activity')?activityPanel():''}<div class="an-primary-grid">${settings.widgets.includes('trend')?trend():''}${settings.widgets.includes('breakdown')?breakdownPanel():''}</div><div class="an-sections">${settings.widgets.filter(k=>!['cumulative','methods','activity','trend','breakdown'].includes(k)).map(k=>panels[k]()).join('')}</div>${!settings.widgets.length?empty('Your summary is ready','Use Customize to add charts, breakdowns and the transaction explorer.'):''}<div class="an-methodology"><strong>A clear basis for every number.</strong><p>Reversed transactions are excluded. Paybacks reduce creditor liabilities and are never counted as another debit. Comparisons use the immediately preceding period of the same length with the same filters.</p></div>`;
       return `<div class="analytics-page">${header()}${savedViews()}${customization()}${controls()}${main}</div>`;
     }
 
@@ -346,15 +374,23 @@
       if (name==='prev') settings.ledgerPage--;
       if (name==='next') settings.ledgerPage++;
       if (name==='clear-drill') {drill=null;settings.ledgerPage=1;}
+      if (name==='activity') {
+        const buckets=visualBuckets(),index=Number(target.dataset.anIndex),bucket=buckets[index];
+        if (bucket&&bucket.count) {
+          const end=buckets[index+1]?.date;
+          drill={name:labelDate(bucket.date),ids:report.rows.filter(t=>t.date>=bucket.date&&(!end||t.date<end)).map(t=>t.id)};
+          settings.ledgerPage=1;settings.widgets=[...new Set([...settings.widgets,'ledger'])];
+        }
+      }
       if (name==='drill') {
         const g=report.groups[Number(target.dataset.anIndex)];
         if (g) {drill={name:g.name,ids:g.ids};settings.ledgerPage=1;settings.widgets=[...new Set([...settings.widgets,'ledger'])];}
       }
-      if (name==='location'||name==='relationship'||name==='account') {
+      if (name==='location'||name==='relationship'||name==='account'||name==='mode') {
         const key=name==='relationship'?target.dataset.anKind:name;
         const value=target.dataset.anValue;
         if (!value) {context.notify('Choose this group in the breakdown explorer to see unassigned records.');return true;}
-        settings[key]=value;
+        settings[key]=name==='mode'&&settings.mode===value?'':value;
         if (key==='client') {settings.type='CREDIT';settings.vendor='';settings.category='';}
         if (key==='vendor') {settings.type='EXPENSE';settings.client='';}
         drill=null;settings.ledgerPage=1;settings.widgets=[...new Set([...settings.widgets,'ledger'])];
@@ -362,7 +398,7 @@
       if (name==='export'||name==='export-ledger') {exportRecords(name==='export-ledger');return true;}
       if (name==='export-breakdown') {if(!report.error)download([[DIMENSIONS[settings.dimension],METRICS[settings.metric]+' INR','Transactions','Share %'],...report.groups.map(g=>[g.name,(g.value/100).toFixed(2),g.count,g.share.toFixed(2)])],'breakdown');return true;}
       update();
-      if (['drill','location','relationship','account'].includes(name)) document.querySelector('#an-ledger')?.scrollIntoView?.({behavior:'smooth',block:'start'});
+      if (['drill','activity','location','relationship','account','mode'].includes(name)) document.querySelector('#an-ledger')?.scrollIntoView?.({behavior:'smooth',block:'start'});
       return true;
     }
 
