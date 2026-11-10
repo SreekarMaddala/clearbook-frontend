@@ -322,7 +322,7 @@
         const q=settings.search.trim().toLowerCase();
         rows=rows.filter(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.location,t.mode,t.amount,t.source_import?.bank_transaction_id].some(v=>String(v||'').toLowerCase().includes(q)));
       }
-      download([['Date','Type','Client','Vendor','From account','To account','Category','Location','Payment mode','Amount INR','Status','Bank reference'],...rows.map(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.location,t.mode,(cents(t)/100).toFixed(2),t.status?.[1]||'',t.source_import?.bank_transaction_id||''])],'transactions');
+      download([['Date','Type','Client','Vendor','From account','To account','Category','Salary month','Location','Payment mode','Amount INR','Status','Bank reference'],...rows.map(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.salary_month||'',t.location,t.mode,(cents(t)/100).toFixed(2),t.status?.[1]||'',t.source_import?.bank_transaction_id||''])],'transactions');
     }
 
     function handleClick(target) {

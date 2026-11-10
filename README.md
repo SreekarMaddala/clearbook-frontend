@@ -2,6 +2,20 @@
 
 Independent frontend repository. Backend: sibling `clearbook-backend` repository. No third-party Node dependencies are required.
 
+## Staff and salaries
+
+Staff is separate from the Vendors screen. Payees can have Supplier,
+Subcontractor and Staff roles together; staff-only payees appear only in Staff.
+Choose Add staff to enter an employee and job title, then Record salary to
+select the salary month, amount, payment date and paying account. Salary month
+is the month the payment covers, independently of when it was paid.
+Existing salary payments with no recorded month display Not recorded in details.
+Staff totals and exports exclude reversed salary payments. Salary month is also
+included in transaction CSV exports.
+
+The existing Amplify app `d1cy6ym167mgbw` is in **ap-northeast-3 (Osaka)**;
+the API, Cognito and DynamoDB backend remain in **ap-south-2 (Hyderabad)**.
+
 ## Local development
 
 Start the backend in a separate terminal:
