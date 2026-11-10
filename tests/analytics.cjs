@@ -20,6 +20,13 @@ const data={accounts,clients,vendors,transactions:[
  tx('statusReversed','CREDIT',9900,{status:['reversed','Reversed'],payer:null,recipient:'bank'}),
 ]};
 let settings={...A.defaults(),period:'custom',from:'2026-10-01',to:'2026-10-31'};
+assert.equal(A.defaults().period,'month');
+assert.deepEqual(A.resolveRange(A.defaults(),data.transactions,'2026-11-09'),{from:'2026-11-01',to:'2026-11-30'});
+assert.deepEqual(A.resolveRange({...A.defaults(),month:'2024-02'},[],'2026-11-09'),{from:'2024-02-01',to:'2024-02-29'});
+assert.deepEqual(A.resolveRange({...A.defaults(),month:'2026-12'},[],'2026-11-09'),{from:'2026-12-01',to:'2026-12-31'});
+assert.equal(A.sanitize({month:'2026-13'}).month,'');
+assert.equal(A.sanitize({month:'2026-10'}).month,'2026-10');
+assert.equal(A.buildReport(data,{...A.defaults(),month:'2026-10'},'2026-11-09').rows.length,6);
 let report=A.buildReport(data,settings,'2026-11-09');
 assert.equal(report.rows.length,6);
 assert.deepEqual(report.current,{expenses:40025,credits:100025,paybacks:5000,incoming:150025,outgoing:35010,count:6,operating:60000,net:115015});
@@ -82,6 +89,17 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../analytics.js'),'utf8'),c
 const controller=browser.ClearbookAnalytics.create();
 latestContext={data,categories:['Steel'],locations:['Madnoor'],workspaceId:'org-a',today:'2026-11-09',loading:false,notify:msg=>notices.push(msg),repaint:()=>{repaints++;html=controller.render(latestContext);}};
 html=controller.render(latestContext);
+assert.ok(html.includes('data-an-value="month" aria-pressed="true"'));
+assert.ok(html.includes('type="month" data-an-setting="month" value="2026-11"'));
+assert.ok(!html.includes('type="date" data-an-setting="from"'));
+controller.handleChange({dataset:{anSetting:'month'},value:'2026-10'});
+controller.handleClick({dataset:{anAction:'date-mode',anValue:'custom'}});
+assert.ok(html.includes('data-an-value="custom" aria-pressed="true"'));
+assert.ok(html.includes('data-an-setting="from" value="2026-10-01"'));
+assert.ok(html.includes('data-an-setting="to" value="2026-10-31"'));
+assert.ok(!html.includes('type="month"'));
+controller.handleClick({dataset:{anAction:'date-mode',anValue:'month'}});
+assert.ok(html.includes('type="month" data-an-setting="month" value="2026-10"'));
 assert.ok(html.includes('Breakdown explorer'));
 assert.ok(html.includes('Tracks &amp; Towers &lt;test&gt;'));
 assert.ok(!html.includes('Tracks & Towers <test>'));
@@ -110,5 +128,20 @@ latestContext={...latestContext,workspaceId:'org-b'};
 html=controller.render(latestContext);
 assert.ok(!html.includes('Madnoor receipts'),'A different workspace cannot inherit named views or filters.');
 assert.ok(!html.includes('role="alert"'));
+controller.handleClick({dataset:{anAction:'reset'}});
+assert.ok(html.includes('type="month" data-an-setting="month" value="2026-11"'));
+// Existing browser preferences adopt Monthly without losing saved views.
+storage.set('clearbook.analytics.v1.org-legacy',JSON.stringify({settings:{period:'all',location:'Madnoor'},views:[{id:'legacy',name:'Old custom view',settings:{period:'custom',from:'2026-10-01',to:'2026-10-31'}}]}));
+latestContext={...latestContext,workspaceId:'org-legacy'};
+html=controller.render(latestContext);
+assert.ok(html.includes('type="month" data-an-setting="month" value="2026-11"'));
+assert.ok(html.includes('Old custom view'));
+controller.handleClick({dataset:{anAction:'view',anId:'legacy'}});
+assert.ok(html.includes('data-an-setting="from" value="2026-10-01"'));
+// New preferences keep a chosen month when the page is reopened.
+controller.handleClick({dataset:{anAction:'date-mode',anValue:'month'}});
+controller.handleChange({dataset:{anSetting:'month'},value:'2026-10'});
+const reopened=browser.ClearbookAnalytics.create();
+assert.ok(reopened.render(latestContext).includes('type="month" data-an-setting="month" value="2026-10"'));
 assert.ok(repaints>=8);
 console.log('PASS: analytics amounts, account flows, comparisons, filters, reversed records, chart aggregation, exports, saved views and workspace isolation.');

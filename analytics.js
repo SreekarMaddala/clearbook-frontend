@@ -12,7 +12,7 @@
   const METRICS = {expenses:'Expenses', credits:'Client credits', paybacks:'Paybacks', volume:'Transaction value'};
   const WIDGETS = {trend:'Money over time', breakdown:'Breakdown explorer', locations:'Location performance', relationships:'Clients & vendors', accounts:'Business accounts', ledger:'Transaction explorer'};
   const COLORS = ['#315f4b','#8da97a','#ba9161','#7395a7','#8d7aa4','#b97963','#729a8a','#b4ab70'];
-  const defaults = () => ({period:'all', from:'', to:'', account:'', client:'', vendor:'', category:'', location:'', mode:'', type:'', group:'month', dimension:'category', metric:'expenses', chart:'cashflow', compare:true, widgets:Object.keys(WIDGETS), search:'', sort:'date-desc', ledgerPage:1, advanced:false, customize:false});
+  const defaults = () => ({period:'month', month:'', from:'', to:'', account:'', client:'', vendor:'', category:'', location:'', mode:'', type:'', group:'month', dimension:'category', metric:'expenses', chart:'cashflow', compare:true, widgets:Object.keys(WIDGETS), search:'', sort:'date-desc', ledgerPage:1, advanced:false, customize:false});
   const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const money = n => new Intl.NumberFormat('en-IN', {style:'currency', currency:'INR', minimumFractionDigits:0, maximumFractionDigits:2}).format(n / 100);
   const compactMoney = n => Math.abs(n)>=10000000 ? `₹${(n/10000000).toLocaleString('en-IN',{maximumFractionDigits:1})}L` : Math.abs(n)>=100000 ? `₹${(n/100000).toLocaleString('en-IN',{maximumFractionDigits:1})}k` : money(n);
@@ -32,6 +32,7 @@
     }
     for (const key of ['account','client','vendor','category','location','mode','type']) if (typeof input[key]==='string') out[key]=input[key].slice(0,200);
     for (const key of ['from','to']) if (validDate(input[key])) out[key]=input[key];
+    if (validDate(`${input.month}-01`)) out.month=input.month;
     if (typeof input.compare==='boolean') out.compare=input.compare;
     if (Array.isArray(input.widgets)) out.widgets=[...new Set(input.widgets.filter(k => Object.hasOwn(WIDGETS,k)))];
     return out;
@@ -41,7 +42,12 @@
     const year=Number(today.slice(0,4)), month=Number(today.slice(5,7));
     let from='', to=today;
     switch (settings.period) {
-      case 'month': from=today.slice(0,7)+'-01'; break;
+      case 'month': {
+        const selected=validDate(`${settings.month}-01`)?settings.month:today.slice(0,7);
+        from=selected+'-01';
+        to=shift(iso(new Date(Date.UTC(Number(selected.slice(0,4)),Number(selected.slice(5,7)),1))),-1);
+        break;
+      }
       case 'lastMonth': to=shift(today.slice(0,7)+'-01',-1); from=to.slice(0,7)+'-01'; break;
       case 'quarter': from=`${year}-${String(Math.floor((month-1)/3)*3+1).padStart(2,'0')}-01`; break;
       case 'financialYear': from=`${month<4?year-1:year}-04-01`; break;
@@ -170,7 +176,7 @@
     let settings=defaults(), views=[], scope=null, context=null, report=null, drill=null;
     const storageKey=()=>`clearbook.analytics.v1.${scope}`;
     const persist=()=>{
-      try { window.localStorage.setItem(storageKey(),JSON.stringify({settings:sanitize(settings),views})); }
+      try { window.localStorage.setItem(storageKey(),JSON.stringify({dateModeVersion:2,settings:sanitize(settings),views})); }
       catch { /* A browser with storage disabled can still use the page. */ }
     };
     function loadScope(workspace) {
@@ -180,6 +186,7 @@
         const saved=JSON.parse(window.localStorage.getItem(storageKey())||'null');
         if (saved) {
           settings=sanitize(saved.settings);
+          if (saved.dateModeVersion!==2) Object.assign(settings,{period:'month',month:'',from:'',to:''});
           views=Array.isArray(saved.views)?saved.views.slice(0,12).filter(v=>typeof v.name==='string'&&typeof v.id==='string').map(v=>({id:v.id.slice(0,80),name:v.name.slice(0,48),settings:sanitize(v.settings)})):[];
         }
       } catch { /* Ignore corrupt or unavailable browser preferences. */ }
@@ -193,9 +200,11 @@
 
     function controls() {
       const d=context.data;
+      const monthly=settings.period==='month';
+      const dateControls=`<div class="an-field an-date-mode"><span>Date range</span><div class="an-date-toggle" role="group" aria-label="Date range mode"><button type="button" data-an-action="date-mode" data-an-value="month" aria-pressed="${monthly}">Monthly</button><button type="button" data-an-action="date-mode" data-an-value="custom" aria-pressed="${!monthly}">Custom dates</button></div></div>${monthly?`<label class="an-field"><span>Month</span><input type="month" data-an-setting="month" value="${escape(settings.month||context.today.slice(0,7))}"></label>`:`<label class="an-field"><span>From</span><input type="date" data-an-setting="from" value="${escape(report.range.from||'')}"></label><label class="an-field"><span>To</span><input type="date" data-an-setting="to" value="${escape(report.range.to||'')}"></label>`}`;
       const referenceOptions=(list)=>list.map(v=>[v.id,v.name]).sort((a,b)=>a[1].localeCompare(b[1]));
       const unique=key=>[...new Set([...(key==='category'?(context.categories||[]):key==='location'?(context.locations||[]):[]),...d.transactions.map(t=>t[key]).filter(Boolean)])].sort().map(v=>[v,v==='CASH'?'Cash':v]);
-      return `<section class="an-controls" aria-label="Analytics filters"><div class="an-control-main">${select('period','Date range',Object.entries(PERIODS),settings.period)}<label class="an-field"><span>From</span><input type="date" data-an-setting="from" value="${escape(report.range.from||'')}"></label><label class="an-field"><span>To</span><input type="date" data-an-setting="to" value="${escape(report.range.to||'')}"></label>${select('location','Location',unique('location'),settings.location,'All locations')}${select('account','Account',referenceOptions(d.accounts),settings.account,'All accounts')}<button class="button an-filter-toggle" data-an-action="advanced" aria-expanded="${settings.advanced}" aria-controls="an-advanced">More filters <span>${['client','vendor','category','mode','type'].filter(k=>settings[k]).length || '+'}</span></button></div><div id="an-advanced" class="an-control-advanced" ${settings.advanced?'':'hidden'}>${select('client','Client',referenceOptions(d.clients),settings.client,'All clients')}${select('vendor','Vendor',referenceOptions(d.vendors),settings.vendor,'All vendors')}${select('category','Category',unique('category'),settings.category,'All categories')}${select('mode','Payment mode',unique('mode'),settings.mode,'All modes')}${select('type','Transaction type',Object.entries(TYPES),settings.type,'All types')}</div><div class="an-control-foot"><label class="an-check"><input type="checkbox" data-an-setting="compare" ${settings.compare?'checked':''}> Compare with previous period</label><div class="an-filter-info"><span>${report.error?'Check dates':`${report.current.count.toLocaleString('en-IN')} transactions in view`}</span><button data-an-action="reset" class="button text">Reset filters</button><button class="button text" data-action="refresh" ${context.loading?'disabled':''}>↻ Refresh</button></div></div></section>`;
+      return `<section class="an-controls" aria-label="Analytics filters"><div class="an-control-main ${monthly?'an-control-monthly':''}">${dateControls}${select('location','Location',unique('location'),settings.location,'All locations')}${select('account','Account',referenceOptions(d.accounts),settings.account,'All accounts')}<button class="button an-filter-toggle" data-an-action="advanced" aria-expanded="${settings.advanced}" aria-controls="an-advanced">More filters <span>${['client','vendor','category','mode','type'].filter(k=>settings[k]).length || '+'}</span></button></div><div id="an-advanced" class="an-control-advanced" ${settings.advanced?'':'hidden'}>${select('client','Client',referenceOptions(d.clients),settings.client,'All clients')}${select('vendor','Vendor',referenceOptions(d.vendors),settings.vendor,'All vendors')}${select('category','Category',unique('category'),settings.category,'All categories')}${select('mode','Payment mode',unique('mode'),settings.mode,'All modes')}${select('type','Transaction type',Object.entries(TYPES),settings.type,'All types')}</div><div class="an-control-foot"><label class="an-check"><input type="checkbox" data-an-setting="compare" ${settings.compare?'checked':''}> Compare with previous period</label><div class="an-filter-info"><span>${report.error?'Check dates':`${report.current.count.toLocaleString('en-IN')} transactions in view`}</span><button data-an-action="reset" class="button text">Reset filters</button><button class="button text" data-action="refresh" ${context.loading?'disabled':''}>↻ Refresh</button></div></div></section>`;
     }
 
     function customization() {
@@ -319,6 +328,15 @@
     function handleClick(target) {
       const name=target.dataset.anAction;
       if (!name || !context) return false;
+      if (name==='date-mode') {
+        const period=target.dataset.anValue;
+        if (!['month','custom'].includes(period) || period===settings.period) return true;
+        if (period==='custom') {
+          settings.from=report.range.from||context.today;
+          settings.to=report.range.to||context.today;
+        }
+        settings.period=period;settings.ledgerPage=1;drill=null;
+      }
       if (name==='customize') settings.customize=!settings.customize;
       if (name==='advanced') settings.advanced=!settings.advanced;
       if (name==='reset') {const layout={widgets:settings.widgets,dimension:settings.dimension,metric:settings.metric,group:settings.group,chart:settings.chart,customize:settings.customize};settings={...defaults(),...layout};drill=null;}
@@ -353,7 +371,10 @@
       if (widget && Object.hasOwn(WIDGETS,widget)) {
         settings.widgets=target.checked?[...new Set([...settings.widgets,widget])]:settings.widgets.filter(k=>k!==widget);
       } else if (key && Object.hasOwn(settings,key)) {
-        if (key==='from'||key==='to') {
+        if (key==='month') {
+          if (!validDate(`${target.value}-01`)) {context.repaint();return true;}
+          settings.month=target.value;settings.period='month';
+        } else if (key==='from'||key==='to') {
           settings.from=report.range.from||'';settings.to=report.range.to||'';
           settings.period='custom';settings[key]=target.value;
         } else settings[key]=key==='compare'?target.checked:target.value;
