@@ -4,8 +4,11 @@ Independent frontend repository. Backend: sibling `clearbook-backend` repository
 
 ## Staff and salaries
 
-Staff is separate from the Vendors screen. Payees can have Supplier,
-Subcontractor and Staff roles together; staff-only payees appear only in Staff.
+Vendors, Subcontractors and Staff have separate directory screens. Vendors lists
+payees with the Supplier role; Subcontractors lists those with the Subcontractor
+role. Payees with multiple roles appear in each matching directory, using the
+same record and payment history. Each Add form selects its directory role by
+default. Staff-only payees appear only in Staff.
 Choose Add staff to enter an employee and job title, then Record salary to
 select the salary month, amount, payment date and paying account. Salary month
 is the month the payment covers, independently of when it was paid.

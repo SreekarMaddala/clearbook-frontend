@@ -66,7 +66,7 @@ const {spawn} = require('node:child_process');
     assert.equal(run('summary.totals.outstanding'),83800);
     assert.ok(node('#main').innerHTML.includes('data-action="refresh"'));
     const count=requests.length;
-    for(const page of ['overview','analytics','transactions','creditors','vendors','accounts','clients']){run(`page='${page}';render()`);assert.ok(node('#main').innerHTML.length>1000);}
+    for(const page of ['overview','analytics','transactions','creditors','vendors','subcontractors','accounts','clients']){run(`page='${page}';render()`);assert.ok(node('#main').innerHTML.length>1000);}
     assert.equal(requests.length,count,'Rendering/navigation must not poll the API.');
     run("location.hash='#analytics';route()");
     assert.equal(run('page'),'analytics');
@@ -240,6 +240,33 @@ const {spawn} = require('node:child_process');
     assert.ok(!node('#main').innerHTML.includes('Integration supplier'));
     run('page="vendors";render()');
     assert.ok(!node('#main').innerHTML.includes('Integration supervisor'));
+    await handlers.click({target:{closest:()=>({dataset:{action:'new-subcontractor'}})}});
+    assert.ok(node('#detail-dialog').innerHTML.includes('Subcontractor name'));
+    assert.match(node('#detail-dialog').innerHTML, /name="role_SUBCONTRACTOR" checked/);
+    assert.match(node('#detail-dialog').innerHTML, /<option selected>Sub Contractor<\/option>/);
+    await submit(form('directory-form',{name:'Integration subcontractor',category:'Sub Contractor',description:'Concrete work',role_SUBCONTRACTOR:'on'},{kind:'subcontractor',id:''}));
+    const subcontractor=run('db.vendors.find(v=>v.name==="Integration subcontractor")');
+    assert.deepEqual(Array.from(subcontractor.roles),['SUBCONTRACTOR']);
+    run('location.hash="#subcontractors";route()');
+    assert.equal(run('page'),'subcontractors');
+    assert.ok(node('#navigation').innerHTML.includes('href="#subcontractors" class="active"'));
+    assert.ok(node('#main').innerHTML.includes('Integration subcontractor'));
+    assert.ok(!node('#main').innerHTML.includes('Integration supplier'));
+    assert.ok(!node('#main').innerHTML.includes('Integration supervisor'));
+    await handlers.click({target:{closest:()=>({dataset:{editReference:subcontractor.id}})}});
+    assert.ok(node('#detail-dialog').innerHTML.includes('Edit subcontractor'));
+    node('#detail-dialog').close();
+    await handlers.click({target:{closest:()=>({dataset:{directory:subcontractor.id}})}});
+    assert.equal(run('filters.vendor'),subcontractor.id);
+    assert.equal(context.location.hash,'transactions');
+    run('page="vendors";render()');
+    assert.ok(node('#main').innerHTML.includes('Integration supplier'));
+    assert.ok(!node('#main').innerHTML.includes('Integration subcontractor'));
+    await submit(form('directory-form',{name:'Integration subcontractor',category:'Sub Contractor',description:'Concrete work and supply',role_SUPPLIER:'on',role_SUBCONTRACTOR:'on'},{kind:'subcontractor',id:subcontractor.id}));
+    for(const directory of ['vendors','subcontractors']){
+      run(`page='${directory}';render()`);
+      assert.ok(node('#main').innerHTML.includes('Integration subcontractor'),'A payee with both roles must appear in both directories.');
+    }
     await handlers.click({target:{closest:()=>({dataset:{paySalary:staff.id}})}});
     assert.ok(node('#transaction-dialog').innerHTML.includes('Staff member'));
     assert.ok(node('#transaction-dialog').innerHTML.includes('name="salary_month" type="month" required'));
