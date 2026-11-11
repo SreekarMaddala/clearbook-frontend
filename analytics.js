@@ -167,6 +167,15 @@
     return '"'+text.replaceAll('"','""')+'"';
   }
   const csv = rows => '\uFEFF'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n');
+  function exportTotalRows(transactions, width, amountColumn) {
+    const active=transactions.filter(t=>!t.reversed_at && t.status?.[0]!=='reversed');
+    const row=(label,items)=>{const cells=Array(width).fill('');cells[0]=label;cells[amountColumn]=(total(items)/100).toFixed(2);return cells;};
+    const rows=[row('TOTAL transaction value (excluding reversed)',active)];
+    if(new Set(active.map(t=>t.type)).size>1){
+      for(const [type,label] of Object.entries(TYPES))rows.push(row('Total '+label,active.filter(t=>t.type===type)));
+    }
+    return rows;
+  }
   const options = (values, selected) => values.map(([value,label])=>`<option value="${escape(value)}" ${selected===value?'selected':''}>${escape(label)}</option>`).join('');
   const select = (key,label,values,current,allLabel='') => `<label class="an-field"><span>${escape(label)}</span><select data-an-setting="${key}">${allLabel?`<option value="">${allLabel}</option>`:''}${options(values,current)}</select></label>`;
   const action = (name,label,extra='') => `<button type="button" class="button ${name==='export'?'primary':''}" data-an-action="${name}" ${extra}>${label}</button>`;
@@ -350,7 +359,7 @@
         const q=settings.search.trim().toLowerCase();
         rows=rows.filter(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.location,t.mode,t.amount,t.source_import?.bank_transaction_id].some(v=>String(v||'').toLowerCase().includes(q)));
       }
-      download([['Date','Type','Client','Vendor','From account','To account','Category','Salary month','Location','Payment mode','Amount INR','Status','Bank reference'],...rows.map(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.salary_month||'',t.location,t.mode,(cents(t)/100).toFixed(2),t.status?.[1]||'',t.source_import?.bank_transaction_id||''])],'transactions');
+      download([['Date','Type','Client','Vendor','From account','To account','Category','Salary month','Location','Payment mode','Amount INR','Status','Bank reference'],...rows.map(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.salary_month||'',t.location,t.mode,(cents(t)/100).toFixed(2),t.status?.[1]||'',t.source_import?.bank_transaction_id||'']),...exportTotalRows(rows,13,10)],'transactions');
     }
 
     function handleClick(target) {
@@ -396,7 +405,7 @@
         drill=null;settings.ledgerPage=1;settings.widgets=[...new Set([...settings.widgets,'ledger'])];
       }
       if (name==='export'||name==='export-ledger') {exportRecords(name==='export-ledger');return true;}
-      if (name==='export-breakdown') {if(!report.error)download([[DIMENSIONS[settings.dimension],METRICS[settings.metric]+' INR','Transactions','Share %'],...report.groups.map(g=>[g.name,(g.value/100).toFixed(2),g.count,g.share.toFixed(2)])],'breakdown');return true;}
+      if (name==='export-breakdown') {if(!report.error)download([[DIMENSIONS[settings.dimension],METRICS[settings.metric]+' INR','Transactions','Share %'],...report.groups.map(g=>[g.name,(g.value/100).toFixed(2),g.count,g.share.toFixed(2)]),['TOTAL',(report.groups.reduce((n,g)=>n+g.value,0)/100).toFixed(2),report.groups.reduce((n,g)=>n+g.count,0),report.groups.some(g=>g.value>0)?'100.00':'0.00']],'breakdown');return true;}
       update();
       if (['drill','activity','location','relationship','account','mode'].includes(name)) document.querySelector('#an-ledger')?.scrollIntoView?.({behavior:'smooth',block:'start'});
       return true;
@@ -444,5 +453,5 @@
 
     return {render,handleClick,handleChange,handleSearch,saveView};
   }
-  return {create,buildReport,breakdown,totals,movement,resolveRange,sanitize,defaults,csv};
+  return {create,buildReport,breakdown,totals,movement,resolveRange,sanitize,defaults,csv,exportTotalRows};
 });

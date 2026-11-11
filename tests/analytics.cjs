@@ -19,6 +19,15 @@ const data={accounts,clients,vendors,transactions:[
  tx('reversed','EXPENSE',9900,{reversed_at:'2026-10-16'}),
  tx('statusReversed','CREDIT',9900,{status:['reversed','Reversed'],payer:null,recipient:'bank'}),
 ]};
+const totalRows=A.exportTotalRows(data.transactions,13,10);
+assert.equal(totalRows[0][10],'2350.50');
+assert.equal(totalRows.find(row=>row[0]==='Total Debit')[10],'400.25');
+assert.equal(totalRows.find(row=>row[0]==='Total Client credit')[10],'1200.25');
+assert.equal(totalRows.find(row=>row[0]==='Total Payback')[10],'50.00');
+assert.equal(totalRows.find(row=>row[0]==='Total Transfer')[10],'700.00');
+assert.ok(totalRows.every(row=>row.length===13));
+assert.equal(A.exportTotalRows([],12,10)[0][10],'0.00');
+assert.equal(A.exportTotalRows([tx('a','EXPENSE',0.1),tx('b','EXPENSE',0.2)],12,10)[0][10],'0.30');
 let settings={...A.defaults(),period:'custom',from:'2026-10-01',to:'2026-10-31'};
 assert.equal(A.defaults().period,'month');
 assert.deepEqual(A.resolveRange(A.defaults(),data.transactions,'2026-11-09'),{from:'2026-11-01',to:'2026-11-30'});
@@ -79,10 +88,10 @@ assert.ok(A.csv([['=SUM(A1:A2)',' @cmd','He said "hello"','a,b']]).includes('"\'
 assert.ok(A.csv([['=SUM(A1:A2)',' @cmd','He said "hello"','a,b']]).includes('"He said ""hello"""'));
 
 // Exercise saved views, workspace isolation and real render/event contracts.
-const storage=new Map(),downloads=[],notices=[];
+const storage=new Map(),downloads=[],notices=[],exportedTexts=[];
 let html='',repaints=0,latestContext;
 const browser={localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)}};
-const ctx=vm.createContext({window:browser,Intl,Date,Map,Set,console,Blob,URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},crypto:{randomUUID:()=>`view-${storage.size}`},setTimeout:fn=>fn(),
+const ctx=vm.createContext({window:browser,Intl,Date,Map,Set,console,Blob:class extends Blob{constructor(parts,options){super(parts,options);exportedTexts.push(parts.join(''));}},URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},crypto:{randomUUID:()=>`view-${storage.size}`},setTimeout:fn=>fn(),
  document:{querySelector:()=>null,createElement:()=>({click(){downloads.push(this.download);}})},
  FormData:class {constructor(form){this.form=form;}get(key){return this.form[key];}}});
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../analytics.js'),'utf8'),ctx);
@@ -133,11 +142,18 @@ assert.ok(html.includes('Showing: <strong>Steel</strong>'));
 controller.handleClick({dataset:{anAction:'export-ledger'}});
 assert.equal(downloads.length,1);
 assert.ok(downloads[0].includes('analytics-transactions'));
+assert.ok(exportedTexts[0].includes('"TOTAL transaction value (excluding reversed)"'));
+assert.ok(exportedTexts[0].includes('"400.25"'),'Drilled export totals must match the selected records.');
+controller.handleClick({dataset:{anAction:'export-breakdown'}});
+assert.ok(exportedTexts[1].includes('"TOTAL","400.25","2","100.00"'));
+controller.handleClick({dataset:{anAction:'export'}});
+assert.ok(exportedTexts[2].includes('"TOTAL transaction value (excluding reversed)"'));
+
 controller.handleChange({dataset:{anSetting:'from'},value:'2026-12-01'});
 controller.handleChange({dataset:{anSetting:'to'},value:'2026-11-01'});
 assert.ok(html.includes('role="alert"'));
 controller.handleClick({dataset:{anAction:'export'}});
-assert.equal(downloads.length,1,'Invalid dates cannot produce a misleading export.');
+assert.equal(downloads.length,3,'Invalid dates cannot produce a misleading export.');
 latestContext={...latestContext,workspaceId:'org-b'};
 html=controller.render(latestContext);
 assert.ok(!html.includes('Madnoor receipts'),'A different workspace cannot inherit named views or filters.');

@@ -31,12 +31,12 @@ const {spawn} = require('node:child_process');
       assert.equal((await fetch(`http://127.0.0.1:${port}${file}`)).status,200);
     }
     assert.equal((await fetch(`http://127.0.0.1:${port}/backend/seed.json`)).status,404);
-    const nodes=new Map(), handlers={}, requests=[];
+    const nodes=new Map(), handlers={}, requests=[], exportBlobs=[];
     const node=key=>{if(!nodes.has(key))nodes.set(key,{innerHTML:'',textContent:'',open:false,hidden:true,setAttribute(){},removeAttribute(){},focus(){},classList:{add(){},remove(){}},showModal(){this.open=true;},close(){this.open=false;}});return nodes.get(key);};
     const context=vm.createContext({
-      Intl,Date,console,structuredClone,crypto:require('node:crypto').webcrypto,AbortSignal,Blob,URL,setTimeout,clearTimeout,
+      Intl,Date,console,structuredClone,crypto:require('node:crypto').webcrypto,AbortSignal,Blob,URL:class extends URL{static createObjectURL(blob){exportBlobs.push(blob);return 'blob:export-test';}static revokeObjectURL(){}},setTimeout,clearTimeout,
       location:{hash:''}, window:{CLEARBOOK_CONFIG:{apiBase:`http://127.0.0.1:${port}/api`},addEventListener(){}},
-      document:{querySelector:key=>key==='#transaction-form'?(nodes.get(key)||null):node(key),addEventListener:(name,handler)=>{handlers[name]=handler;}},
+      document:{createElement:()=>({click(){}}),querySelector:key=>key==='#transaction-form'?(nodes.get(key)||null):node(key),addEventListener:(name,handler)=>{handlers[name]=handler;}},
       fetch:async (...args)=>{requests.push({url:args[0],method:args[1]?.method||'GET'});return fetch(...args);},
       FormData:class{constructor(form){this.values=form.fields;}entries(){return Object.entries(this.values)[Symbol.iterator]();}[Symbol.iterator](){return this.entries();}get(key){return this.values[key];}},
     });
@@ -93,6 +93,16 @@ const {spawn} = require('node:child_process');
     run("search='name that does not exist';showSearchSuggestions()");
     assert.ok(node('#search-suggestions').innerHTML.includes('No matching names'));
     run("closeSearchSuggestions();search='';render()");
+    run("page='transactions';filters={};tab='all';search='';exportCSV()");
+    const exportedCSV=await exportBlobs.pop().text();
+    const expectedExportTotal=run("(db.transactions.filter(t=>!t.reversed_at&&t.status?.[0]!=='reversed').reduce((n,t)=>n+Math.round(t.amount*100),0)/100).toFixed(2)");
+    assert.ok(exportedCSV.includes('"TOTAL transaction value (excluding reversed)"'));
+    assert.ok(exportedCSV.includes(`"${expectedExportTotal}"`));
+    run("filters={vendor:db.vendors[0].id};exportCSV()");
+    const filteredExport=await exportBlobs.pop().text();
+    const filteredTotal=run("window.ClearbookAnalytics.exportTotalRows(filteredTransactions(),12,10)[0][10]");
+    assert.ok(filteredExport.includes(`"${filteredTotal}"`));
+    run("filters={};render()");
     const count=requests.length;
     for(const page of ['overview','analytics','transactions','creditors','vendors','subcontractors','accounts','clients']){run(`page='${page}';render()`);assert.ok(node('#main').innerHTML.length>1000);}
     assert.equal(requests.length,count,'Rendering/navigation must not poll the API.');
