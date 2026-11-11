@@ -32,7 +32,7 @@ const {spawn} = require('node:child_process');
     }
     assert.equal((await fetch(`http://127.0.0.1:${port}/backend/seed.json`)).status,404);
     const nodes=new Map(), handlers={}, requests=[];
-    const node=key=>{if(!nodes.has(key))nodes.set(key,{innerHTML:'',textContent:'',open:false,classList:{add(){},remove(){}},showModal(){this.open=true;},close(){this.open=false;}});return nodes.get(key);};
+    const node=key=>{if(!nodes.has(key))nodes.set(key,{innerHTML:'',textContent:'',open:false,hidden:true,setAttribute(){},removeAttribute(){},focus(){},classList:{add(){},remove(){}},showModal(){this.open=true;},close(){this.open=false;}});return nodes.get(key);};
     const context=vm.createContext({
       Intl,Date,console,structuredClone,crypto:require('node:crypto').webcrypto,AbortSignal,Blob,URL,setTimeout,clearTimeout,
       location:{hash:''}, window:{CLEARBOOK_CONFIG:{apiBase:`http://127.0.0.1:${port}/api`},addEventListener(){}},
@@ -65,6 +65,34 @@ const {spawn} = require('node:child_process');
     assert.equal(run('db.transactions.length'),28);
     assert.equal(run('summary.totals.outstanding'),83800);
     assert.ok(node('#main').innerHTML.includes('data-action="refresh"'));
+    assert.equal(run('overviewMonth'),run('isoToday().slice(0,7)'));
+    assert.ok(node('#main').innerHTML.includes('aria-label="Overview month"'));
+    assert.equal(run('filteredTransactions().length'),run('db.transactions.filter(t=>t.date.startsWith(isoToday().slice(0,7))).length'));
+    handlers.change({target:{dataset:{overviewMonth:''},value:'2026-10'}});
+    assert.equal(run('overviewMonth'),'2026-10');
+    assert.equal(run('overviewTotals().expenses'),run("sum(db.transactions.filter(t=>t.type==='EXPENSE'&&t.date.startsWith('2026-10')))"));
+    assert.ok(run("filteredTransactions().every(t=>t.date.startsWith('2026-10'))"));
+    assert.ok(node('#main').innerHTML.includes('Weekly debits and repayments for October 2026'));
+    run("page='transactions'");
+    assert.equal(run('filteredTransactions().length'),run('db.transactions.length'),'Overview month must not restrict the transaction ledger.');
+    run("page='overview'");
+    const searchInput=node('#search');searchInput.id='search';
+    handlers.focusin({target:searchInput});
+    assert.equal(node('#search-suggestions').hidden,false);
+    assert.ok(node('#search-suggestions').innerHTML.includes('data-search-name='));
+    const suggested=run('db.vendors[0].name');
+    handlers.input({target:{id:'search',value:suggested.slice(0,4)}});
+    assert.ok(node('#search-suggestions').innerHTML.includes(suggested));
+    await handlers.click({target:{closest:()=>({dataset:{searchName:suggested}})}});
+    assert.equal(run('search'),suggested);
+    assert.equal(node('#search-suggestions').hidden,true);
+    assert.ok(run('filteredTransactions().every(t=>`${client(t.client_id)?.name||account(t.payer)?.name} ${vendor(t.vendor)?.name||account(t.recipient)?.name}`.toLowerCase().includes(search.toLowerCase()))'));
+    handlers.focusin({target:searchInput});
+    handlers.keydown({target:searchInput,key:'Escape',preventDefault(){}});
+    assert.equal(node('#search-suggestions').hidden,true);
+    run("search='name that does not exist';showSearchSuggestions()");
+    assert.ok(node('#search-suggestions').innerHTML.includes('No matching names'));
+    run("closeSearchSuggestions();search='';render()");
     const count=requests.length;
     for(const page of ['overview','analytics','transactions','creditors','vendors','subcontractors','accounts','clients']){run(`page='${page}';render()`);assert.ok(node('#main').innerHTML.length>1000);}
     assert.equal(requests.length,count,'Rendering/navigation must not poll the API.');
@@ -79,7 +107,7 @@ const {spawn} = require('node:child_process');
     assert.equal(requests.length,count,'Analytics filtering and customization must use the loaded workspace snapshot.');
     async function submit(form) {
       await handlers.submit({target:form,preventDefault(){}});
-      assert.match(node('#toast').textContent, /saved\.|updated\.|added\.|reversed\./, `${form.id}: ${node('#toast').textContent}`);
+      assert.match(node('#toast').textContent, /saved\.|updated\.|added\.|reversed\./, `${form.id}: ${node('#toast').textContent} ${run("loadError")}`);
     }
     const button={disabled:false};
     const form=(id,fields,dataset={})=>({id,fields,dataset,querySelector(){return button;}});
