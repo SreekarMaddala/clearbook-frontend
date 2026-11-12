@@ -37,4 +37,36 @@ body.account-loading main{padding:0}
 
 .directory-card .payee-roles{display:block;margin-top:8px}
 
+/* Keep transaction fields aligned, including fields with helper text. */
+#transaction-dialog{width:min(660px,calc(100% - 24px));max-height:92vh;max-height:92svh;scrollbar-width:thin;scroll-padding-block:88px}
+#transaction-dialog .modal-head{position:sticky;top:0;z-index:2;background:white;padding:22px 28px 14px;border-bottom:1px solid var(--line)}
+#transaction-dialog .modal-head h2{font-family:Manrope,'DM Sans',sans-serif}
+#transaction-dialog .close-button{width:36px;height:36px;flex-shrink:0}
+#transaction-dialog .form-body{padding:0 28px}
+#transaction-dialog .modal-subtitle{margin:16px 0;color:#687769;font-size:12px}
+#transaction-dialog .type-switch{margin-bottom:22px}
+#transaction-dialog .type-switch button{min-height:40px;font-size:12px}
+#transaction-dialog .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 20px;align-items:start}
+#transaction-dialog .form-field{min-width:0;align-content:start;gap:8px;font-size:12px;line-height:18px;color:#53634f}
+#transaction-dialog .field-heading{min-height:18px;gap:8px;flex-wrap:wrap}
+#transaction-dialog .inline-add{font-size:11px;min-height:18px}
+#transaction-dialog .form-field input:not([type=file]),#transaction-dialog .form-field select{min-width:0;height:44px;padding:10px 12px;font-size:13px}
+#transaction-dialog .transaction-location{grid-column:1/-1}
+#transaction-dialog .upload{display:grid;grid-template-columns:32px minmax(0,1fr);align-items:center;gap:12px;padding:16px;text-align:left;background:#f8faf6}
+#transaction-dialog .upload svg{margin:0;width:24px;height:24px;color:#6d8565}
+#transaction-dialog .upload-copy{min-width:0;overflow-wrap:anywhere;line-height:1.5}
+#transaction-dialog .upload small{font-size:10px;line-height:1.5;color:#788471;margin-top:4px}
+#transaction-dialog .upload:hover,#transaction-dialog .upload:focus-within{border-color:#72966b;background:#f0f5ed}
+#transaction-dialog .upload:focus-within{outline:2px solid #a5c8ac;outline-offset:2px}
+#transaction-dialog .form-actions{position:sticky;bottom:0;z-index:1;background:white;margin:22px -28px 0;padding:16px 28px;box-shadow:0 -8px 16px #ffffffeb}
+#transaction-dialog .form-actions .button{min-height:42px;font-size:12px;padding-inline:18px}
+@media(max-width:540px){
+ #transaction-dialog .modal-head{padding:16px 18px 12px}
+ #transaction-dialog .modal-head h2{font-size:19px}
+ #transaction-dialog .form-body{padding:0 18px}
+ #transaction-dialog .form-grid{grid-template-columns:minmax(0,1fr);gap:16px}
+ #transaction-dialog .type-switch{margin-bottom:18px}
+ #transaction-dialog .form-actions{margin-inline:-18px;padding:14px 18px}
+}
+
 .transaction-panel{overflow:visible}.transaction-search{position:relative}.search-suggestions{position:absolute;top:calc(100% + 6px);right:0;width:max(100%,280px);max-width:calc(100vw - 40px);max-height:260px;overflow-y:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #26342e20;z-index:20;padding:5px}.search-suggestions[hidden]{display:none}.search-suggestions button{display:block;width:100%;text-align:left;background:white;color:#26342e;padding:11px 12px;border-radius:5px;font-size:12px;overflow-wrap:anywhere}.search-suggestions button:hover,.search-suggestions button[aria-selected="true"]{background:#edf3ec;color:var(--green)}.search-no-match{font-size:12px;color:var(--muted);padding:11px 12px;margin:0}
