@@ -1,7 +1,7 @@
-# Loading avatar
+# Loading screen branding
 
-Asset: `assets/loading-avatar.png`. Generated with the built-in image generation tool using the user's attached portrait as the reference. The original photograph is not embedded in the website. The transparent avatar is animated with CSS; reduced-motion settings disable the animation.
+Asset: `assets/at-infra-logo.png` (1254 x 1254 pixels). Sharpened from the user-provided A&T INFRA logo using the built-in imagegen tool. The loading screen displays it at up to 380 CSS pixels, with responsive sizing for small screens and a matching pale background. Only the loading dots animate; reduced-motion preferences disable them.
 
-Generation prompt:
+Final image prompt:
 
-> Create a single transparent-background emoji-style 3D avatar asset for a website loading indicator, based on the person in the most recent attached photograph. Preserve his recognizable features: thick tousled black hair, short full black beard and moustache, medium brown skin, black zip-up fleece with a gray collar, head turned slightly left. Friendly, calm stylized emoji likeness, head and upper shoulders only, centered with plenty of transparent margin, polished soft 3D rendering, clear silhouette readable at 100 pixels. One avatar only. No background scenery, no text, no circles, no spinner, no shadow panel, no extra objects. Actual transparent background. The earlier website screenshot is context only, not an image to reproduce.
+> Edit the attached A&T INFRA logo image for use as a website loading-screen asset. Upscale and clean up the logo to crisp high resolution, faithfully preserving the exact purple building symbol, sweeping base, proportions, purple tones, and bold text 'A&T INFRA'. Do not redesign. Remove compression blur and the small pale sparkle in the lower right. Use a perfectly uniform pale near-white background #f4f5fb. Crop the excessive surrounding blank space so the complete symbol and text occupy about 85% of the image width, keeping comfortable equal margins. Output a high resolution square image. Exact lettering: A&T INFRA.

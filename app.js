@@ -434,7 +434,7 @@ function renderProvider(){
  main.innerHTML=window.ClearbookProvider.render({...providerData,page,loading,error:loadError});
  document.querySelector('.local-badge').textContent=loading?'Refreshing...':'Provider console';
 }
-function accountLoader(){return `<section class="account-loader" role="status" aria-live="polite" aria-label="Loading your account"><div class="loader-avatar"><span class="loader-ring" aria-hidden="true"></span><img src="assets/loading-avatar.png" width="144" height="144" alt="" fetchpriority="high"></div><p>Loading<span class="loader-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></section>`;}
+function accountLoader(){return `<section class="account-loader" role="status" aria-live="polite" aria-label="Loading your account"><div class="loader-brand"><img src="assets/at-infra-logo.png" width="1254" height="1254" alt="A&amp;T INFRA" fetchpriority="high"></div><p>Loading<span class="loader-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></section>`;}
 function renderAuth(){
  const auth=window.ClearbookAuth;
  document.body?.classList.toggle('account-loading',Boolean(auth?.enabled&&auth.isSignedIn()&&!workspaceSession&&!loadError));

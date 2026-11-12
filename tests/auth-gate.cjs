@@ -21,7 +21,7 @@ const context=vm.createContext({Intl,Date,URL,URLSearchParams,setTimeout,clearTi
  assert.equal(signIns,1);
  auth.isSignedIn=()=>true;
  vm.runInContext('renderAuth()',context);
- assert.ok(node('#main').innerHTML.includes('assets/loading-avatar.png'));
+ assert.ok(node('#main').innerHTML.includes('assets/at-infra-logo.png'));
  assert.ok(node('#main').innerHTML.includes('role="status"'));
  assert.ok(!node('#main').innerHTML.includes('data-action="refresh"'));
  assert.ok(!node('#main').innerHTML.includes('data-action="sign-out"'));
@@ -29,6 +29,6 @@ const context=vm.createContext({Intl,Date,URL,URLSearchParams,setTimeout,clearTi
  assert.ok(node('#main').innerHTML.includes('Access check failed'));
  assert.ok(node('#main').innerHTML.includes('data-action="refresh"'));
  assert.ok(node('#main').innerHTML.includes('data-action="sign-out"'));
- assert.ok(!node('#main').innerHTML.includes('assets/loading-avatar.png'));
+ assert.ok(!node('#main').innerHTML.includes('assets/at-infra-logo.png'));
  console.log('PASS: hosted sign-in gate hides transactions, suppresses API requests, and routes the sign-in action.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
