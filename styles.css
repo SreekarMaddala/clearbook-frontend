@@ -60,6 +60,16 @@ body.account-loading main{padding:0}
 #transaction-dialog .upload:focus-within{outline:2px solid #a5c8ac;outline-offset:2px}
 #transaction-dialog .form-actions{position:sticky;bottom:0;z-index:1;background:white;margin:22px -28px 0;padding:16px 28px;box-shadow:0 -8px 16px #ffffffeb}
 #transaction-dialog .form-actions .button{min-height:42px;font-size:12px;padding-inline:18px}
+#transaction-dialog .select-search{position:relative;min-width:0}
+#transaction-dialog .select-search input{padding-right:42px!important}
+#transaction-dialog .select-search-toggle{position:absolute;right:1px;top:1px;width:40px;height:42px;background:transparent;color:#53634f;border-radius:6px}
+#transaction-dialog .select-search-toggle svg{width:16px;height:16px}
+#transaction-dialog .select-search-options{position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:5;max-height:190px;overflow:auto;padding:5px;background:white;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #26342e20;overscroll-behavior:contain}
+#transaction-dialog .select-search-options[hidden]{display:none}
+#transaction-dialog .select-search.opens-up .select-search-options{top:auto;bottom:calc(100% + 5px)}
+#transaction-dialog .select-search-options button{display:block;width:100%;min-height:38px;padding:9px 10px;text-align:left;font-size:13px;line-height:1.5;color:#405336;background:white;border-radius:4px;overflow-wrap:anywhere}
+#transaction-dialog .select-search-options button:hover,#transaction-dialog .select-search-options button[aria-selected=true]{background:#edf3ec;color:var(--green)}
+#transaction-dialog .select-search-options p{margin:0;padding:10px;font-size:12px;color:#728064}
 @media(max-width:540px){
  #transaction-dialog .modal-head{padding:16px 18px 12px}
  #transaction-dialog .modal-head h2{font-size:19px}

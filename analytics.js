@@ -431,11 +431,11 @@
     function handleSearch(target) {
       if (!Object.hasOwn(target.dataset||{},'anSearch')) return false;
       settings.search=target.value;settings.ledgerPage=1;
-      const position=target.selectionStart;
+      const {selectionStart,selectionEnd,selectionDirection}=target;
       context.repaint();
       const input=document.querySelector('#an-search');
       input?.focus();
-      if (input?.type!=='search') input?.setSelectionRange?.(position,position);
+      if (selectionStart!=null) input?.setSelectionRange?.(selectionStart,selectionEnd,selectionDirection);
       return true;
     }
 
