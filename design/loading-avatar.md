@@ -1,6 +1,6 @@
 # Loading screen branding
 
-Asset: `assets/at-infra-logo.png` (1254 x 1254 pixels). Sharpened from the user-provided A&T INFRA logo using the built-in imagegen tool. The loading screen displays it at up to 168 CSS pixels, with responsive sizing for small screens and a matching pale background. A slim indeterminate loading bar indicates ongoing work without showing a fabricated percentage. Reduced-motion preferences replace its animation with a static track. The visible loading label and live status region remain available to assistive technology.
+Asset: `assets/at-infra-logo.png` (1254 x 1254 pixels). Sharpened from the user-provided A&T INFRA logo using the built-in imagegen tool. The loading screen displays it at up to 152 CSS pixels in a padded circular badge, with responsive sizing for small screens. A neutral background matches the app, with a muted purple loading bar coordinated to the logo. A slim indeterminate loading bar indicates ongoing work without showing a fabricated percentage. Reduced-motion preferences replace its animation with a static track. The visible loading label and live status region remain available to assistive technology.
 
 Final image prompt:
 

@@ -22,12 +22,12 @@
 body.account-loading .sidebar,body.account-loading .topbar,body.account-loading footer{display:none}
 body.account-loading .main-shell{margin-left:0}
 body.account-loading main{padding:0}
-.account-loader{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:32px 20px;background:#f4f5fb}
-.loader-brand{width:min(168px,48vw,32svh);flex-shrink:0}
-.loader-brand img{display:block;width:100%;height:auto;object-fit:contain}
-.loader-track{width:min(160px,48vw);height:3px;overflow:hidden;border-radius:999px;background:#e3dfef}
-.loader-progress{display:block;width:45%;height:100%;border-radius:inherit;background:#6855aa;transform:translateX(-100%);animation:loader-progress 1.6s cubic-bezier(.45,0,.25,1) infinite;will-change:transform}
-.account-loader p{margin:0;color:#756d8b;font-size:12px;line-height:1.5;letter-spacing:.02em}
+.account-loader{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:32px 20px;background:#f7f8f5;--loader-purple:#6050a0}
+.loader-brand{width:min(152px,44vw,30svh);aspect-ratio:1;flex-shrink:0;display:grid;place-items:center;padding:18px;border-radius:50%;overflow:hidden;background:#f4f5fb;box-shadow:0 4px 18px #30255a08,inset 0 0 0 1px #6050a00a}
+.loader-brand img{display:block;width:100%;height:auto;object-fit:contain;mix-blend-mode:multiply}
+.loader-track{width:min(144px,44vw);height:3px;overflow:hidden;border-radius:999px;background:#e6e3ed}
+.loader-progress{display:block;width:45%;height:100%;border-radius:inherit;background:var(--loader-purple);transform:translateX(-100%);animation:loader-progress 1.6s cubic-bezier(.45,0,.25,1) infinite;will-change:transform}
+.account-loader p{margin:0;color:#807b8b;font-size:12px;line-height:1.5;letter-spacing:.02em}
 @keyframes loader-progress{0%{transform:translateX(-100%)}100%{transform:translateX(325%)}}
 @media(prefers-reduced-motion:reduce){.loader-progress{width:100%;animation:none;transform:none;will-change:auto;background:#a397c7}}
 
