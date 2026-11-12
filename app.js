@@ -434,7 +434,7 @@ function renderProvider(){
  main.innerHTML=window.ClearbookProvider.render({...providerData,page,loading,error:loadError});
  document.querySelector('.local-badge').textContent=loading?'Refreshing...':'Provider console';
 }
-function accountLoader(){return `<section class="account-loader" role="status" aria-live="polite" aria-label="Loading your account"><div class="loader-brand"><img src="assets/at-infra-logo.png" width="1254" height="1254" alt="A&amp;T INFRA" fetchpriority="high"></div><div class="loader-track" aria-hidden="true"><span class="loader-progress"></span></div><p>Loading your workspace...</p></section>`;}
+function accountLoader(){return `<section class="account-loader" role="status" aria-live="polite" aria-label="Loading your account"><div class="loader-brand"><svg class="loader-logo" viewBox="0 0 1280 1280" role="img" aria-label="A&amp;T INFRA"><defs><mask id="loader-still" maskUnits="userSpaceOnUse" x="0" y="0" width="1280" height="1280"><rect width="1280" height="1280" fill="white"/><polygon points="390,937 640,937 1040,726 900,723 800,734 700,758 600,788 500,833 430,875 390,909" fill="black"/></mask><clipPath id="loader-swoosh-clip"><polygon points="390,937 640,937 1040,726 900,723 800,734 700,758 600,788 500,833 430,875 390,909"/></clipPath></defs><image href="assets/at-infra-logo-green.png" width="1280" height="1280" mask="url(#loader-still)"/><g class="loader-swoosh"><image href="assets/at-infra-logo-green.png" width="1280" height="1280" clip-path="url(#loader-swoosh-clip)"/></g></svg></div><p>Loading your workspace...</p></section>`;}
 function renderAuth(){
  const auth=window.ClearbookAuth;
  document.body?.classList.toggle('account-loading',Boolean(auth?.enabled&&auth.isSignedIn()&&!workspaceSession&&!loadError));
