@@ -167,6 +167,11 @@
     return '"'+text.replaceAll('"','""')+'"';
   }
   const csv = rows => '\uFEFF'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n');
+  function omitEmptySalaryMonth(rows) {
+    const column=rows[0].indexOf('Salary month');
+    if(column<0 || rows.slice(1).some(row=>String(row[column]??'').trim()))return rows;
+    return rows.map(row=>row.filter((_,index)=>index!==column));
+  }
   function exportTotalRows(transactions, width, amountColumn) {
     const active=transactions.filter(t=>!t.reversed_at && t.status?.[0]!=='reversed');
     const row=(label,items)=>{const cells=Array(width).fill('');cells[0]=label;cells[amountColumn]=(total(items)/100).toFixed(2);return cells;};
@@ -359,7 +364,7 @@
         const q=settings.search.trim().toLowerCase();
         rows=rows.filter(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.location,t.mode,t.amount,t.source_import?.bank_transaction_id].some(v=>String(v||'').toLowerCase().includes(q)));
       }
-      download([['Date','Type','Client','Vendor','From account','To account','Category','Salary month','Location','Payment mode','Amount INR','Status','Bank reference'],...rows.map(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.salary_month||'',t.location,t.mode,(cents(t)/100).toFixed(2),t.status?.[1]||'',t.source_import?.bank_transaction_id||'']),...exportTotalRows(rows,13,10)],'transactions');
+      download(omitEmptySalaryMonth([['Date','Type','Client','Vendor','From account','To account','Category','Salary month','Location','Payment mode','Amount INR','Status','Bank reference'],...rows.map(t=>[t.date,TYPES[t.type],find('clients',t.client_id),find('vendors',t.vendor),find('accounts',t.payer),find('accounts',t.recipient),t.category,t.salary_month||'',t.location,t.mode,(cents(t)/100).toFixed(2),t.status?.[1]||'',t.source_import?.bank_transaction_id||'']),...exportTotalRows(rows,13,10)]),'transactions');
     }
 
     function handleClick(target) {
@@ -453,5 +458,5 @@
 
     return {render,handleClick,handleChange,handleSearch,saveView};
   }
-  return {create,buildReport,breakdown,totals,movement,resolveRange,sanitize,defaults,csv,exportTotalRows};
+  return {create,buildReport,breakdown,totals,movement,resolveRange,sanitize,defaults,csv,exportTotalRows,omitEmptySalaryMonth};
 });

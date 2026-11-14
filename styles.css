@@ -18,6 +18,7 @@
 .status.received{background:#e4f2e8;color:#245a3c}
 
 .form-field .amount-words{display:block;color:var(--green);font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}.amount-words:empty{display:none}
+.transaction-row{cursor:pointer}.transaction-row:hover{background:#f2f5ef}.transaction-row:focus-visible{outline:2px solid var(--green);outline-offset:-2px}.detail-content .detail-line strong{min-width:0;max-width:75%;white-space:pre-wrap;overflow-wrap:anywhere;text-align:right}
 
 body.account-loading .sidebar,body.account-loading .topbar,body.account-loading footer{display:none}
 body.account-loading .main-shell{margin-left:0}

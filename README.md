@@ -14,7 +14,8 @@ select the salary month, amount, payment date and paying account. Salary month
 is the month the payment covers, independently of when it was paid.
 Existing salary payments with no recorded month display Not recorded in details.
 Staff totals and exports exclude reversed salary payments. Salary month is also
-included in transaction CSV exports.
+included in transaction CSV exports only when at least one exported payment has
+a recorded salary month. Otherwise, the column is omitted.
 
 The existing Amplify app `d1cy6ym167mgbw` is in **ap-northeast-3 (Osaka)**;
 the API, Cognito and DynamoDB backend remain in **ap-south-2 (Hyderabad)**.
