@@ -12,9 +12,13 @@ const context=vm.createContext({Intl,Date,URL,URLSearchParams,setTimeout,clearTi
  fetch:async()=>{apiRequests++;throw new Error('Signed-out users must never call the API.');},
 });
 (async()=>{
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'../landing.js'),'utf8'),context);
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../app.js'),'utf8'),context);
  await context.window.CLEARBOOK_READY;
  assert.equal(apiRequests,0);
+ assert.ok(node('#main').innerHTML.includes('Good business.'));
+ assert.ok(node('#main').innerHTML.includes('Illustrative sample'));
+ assert.ok(node('#main').innerHTML.includes('lp-scene'));
  assert.ok(node('#main').innerHTML.includes('data-action="sign-in"'));
  assert.ok(!node('#main').innerHTML.includes('Recent transactions'));
  await handlers.click({target:{closest:()=>({dataset:{action:'sign-in'}})}});

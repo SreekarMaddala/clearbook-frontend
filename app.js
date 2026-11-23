@@ -481,11 +481,13 @@ function renderAuth(){
  const signed=auth.isSignedIn();
  document.body.classList.toggle('signed-out',!signed);
  if(!signed){
-  main.innerHTML=`<section class="auth-card"><div class="eyebrow">CLEARBOOK WORKSPACE</div><h1>Your accounts. In one place.</h1><p>Sign in to manage your business debits, vendors and paybacks.</p>${authError?`<p class="auth-error" role="alert">${esc(authError)}</p>`:''}<button class="button primary" data-action="sign-in">Sign in securely ${icon('arrow')}</button><small>Access is limited to your workspace members.</small></section>`;
+  if(window.ClearbookLanding){main.innerHTML=window.ClearbookLanding.render(authError);window.ClearbookLanding.mount(main);}
+  else main.innerHTML=`<section class="auth-card"><div class="eyebrow">CLEARBOOK WORKSPACE</div><h1>Your accounts. In one place.</h1><p>Sign in to manage your business debits, vendors and paybacks.</p>${authError?`<p class="auth-error" role="alert">${esc(authError)}</p>`:''}<button class="button primary" data-action="sign-in">Sign in securely ${icon('arrow')}</button><small>Access is limited to your workspace members.</small></section>`;
   document.querySelector('#navigation').innerHTML='';
   document.querySelector('.local-badge').textContent='Sign-in required';
   return true;
  }
+ window.ClearbookLanding?.destroy();
  if(!workspaceSession){
   main.innerHTML=loadError?`<section class="auth-card"><div class="eyebrow">CLEARBOOK</div><h1>Account access unavailable</h1><p role="alert">${esc(loadError)}</p><button class="button" data-action="refresh">Retry</button><button class="button" data-action="sign-out">Sign out</button></section>`:accountLoader();
   document.querySelector('#navigation').innerHTML='';

@@ -1,3 +1,4 @@
+require('./build-scene.cjs');
 const http = require('node:http');
 const https = require('node:https');
 const fs = require('node:fs');
@@ -7,7 +8,10 @@ const root = path.resolve(__dirname, '..');
 const port = Number(process.env.PORT || 5173);
 const backend = new URL(process.env.CLEARBOOK_API_PROXY || 'http://127.0.0.1:8000');
 if (!['http:', 'https:'].includes(backend.protocol)) throw new Error('API proxy must use HTTP or HTTPS.');
-const assets = {'/assets/at-infra-logo-green.png':['assets/at-infra-logo-green.png','image/png'],'/':['index.html','text/html'], '/index.html':['index.html','text/html'],
+// Reuse a bounded pool so snapshot refreshes do not overwhelm the local Python server.
+const ProxyAgent=backend.protocol==='https:'?https.Agent:http.Agent;
+const upstreamAgent=new ProxyAgent({keepAlive:true,maxSockets:4});
+const assets = {'/landing.js':['landing.js','text/javascript'],'/landing.css':['landing.css','text/css'],'/assets/landing-scene.js':['assets/landing-scene.js','text/javascript'],'/assets/at-infra-logo-green.png':['assets/at-infra-logo-green.png','image/png'],'/':['index.html','text/html'], '/index.html':['index.html','text/html'],
   '/analytics.js':['analytics.js','text/javascript'], '/analytics.css':['analytics.css','text/css'], '/app.js':['app.js','text/javascript'], '/auth.js':['auth.js','text/javascript'], '/provider.js':['provider.js','text/javascript'], '/config.js':['config.js','text/javascript'], '/styles.css':['styles.css','text/css']};
 function error(response, status, message) {
   if (response.headersSent) return response.destroy();
@@ -24,7 +28,7 @@ const server = http.createServer((request, response) => {
     // The local API's origin check receives the trusted development proxy origin.
     if (origin) headers.origin=backend.origin;
     const client = backend.protocol === 'https:' ? https : http;
-    const upstream = client.request({protocol:backend.protocol, hostname:backend.hostname, port:backend.port,
+    const upstream = client.request({agent:upstreamAgent,protocol:backend.protocol, hostname:backend.hostname, port:backend.port,
       path:request.url, method:request.method, headers, timeout:30000}, upstreamResponse => {
       response.writeHead(upstreamResponse.statusCode, {...upstreamResponse.headers,'Cache-Control':'no-store'});
       upstreamResponse.pipe(response);

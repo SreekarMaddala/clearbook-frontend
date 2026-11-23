@@ -13,3 +13,5 @@ credentials
 node_modules/
 dist/
 .vercel/
+
+assets/landing-scene.js

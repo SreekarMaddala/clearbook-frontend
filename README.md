@@ -1,6 +1,22 @@
 # Clearbook frontend
 
-Independent frontend repository. Backend: sibling `clearbook-backend` repository. No third-party Node dependencies are required.
+## Public landing page
+
+Signed-out visitors see a responsive landing page with a locally bundled Three.js
+scene, optional motion, product-preview tabs and the existing Cognito sign-in
+action. Signed-in users continue directly to their workspace. Sample records on
+the landing page are illustrative; no organization data is fetched while signed
+out. The 3D scene loads only on the landing page, pauses offscreen and in hidden
+tabs, respects reduced motion, and has a CSS fallback when WebGL is unavailable.
+
+Run `npm ci` before development. `npm run dev` also builds the 3D bundle. Visit
+`http://127.0.0.1:5173/?landing=1` to preview the signed-out page locally without
+starting the backend. `npm run build` bundles the scene and copies its assets.
+`npm run test:landing` runs desktop/mobile and login-handoff checks using an
+installed Edge browser on Windows (override with `PLAYWRIGHT_CHANNEL`).
+
+
+Independent frontend repository. Backend: sibling `clearbook-backend` repository. The landing page uses Three.js, bundled with esbuild; browser checks use Playwright.
 
 ## Staff and salaries
 
