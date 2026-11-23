@@ -368,6 +368,9 @@ const {spawn} = require('node:child_process');
       assert.equal(payment.payee_name,'Raju <team>');
       assert.equal(payment.vendor,null);
       assert.equal(run('db.vendors.length'),vendorCount);
+      run(`openForm();draft.category='Labour Tips';renderForm()`);
+      assert.ok(node('#transaction-dialog').innerHTML.includes('list="labour-payee-names"'));
+      assert.ok(node('#transaction-dialog').innerHTML.includes('<option value="Raju &lt;team&gt;"></option>'));
       run(`page='transactions';search='Raju <team>';filters={};tab='all';pageNumber=1;render()`);
       assert.ok(node('#main').innerHTML.includes('Raju &lt;team&gt;'));
       run(`openDetail('${payment.id}')`);
@@ -384,7 +387,29 @@ const {spawn} = require('node:child_process');
       assert.ok(node('#transaction-dialog').innerHTML.includes('name="vendor"'));
       assert.ok(!node('#transaction-dialog').innerHTML.includes('name="payee_name"'));
     }
-    console.log('PASS: HTTP create/edit/reverse, staff salaries, optional labour payees, search, details, exports and manual refresh.');
+    run(`
+      const savedTransactions=db.transactions;
+      db.transactions=[
+        {type:'EXPENSE',category:'LABOUR PAYMENTS',payee_name:'  Raju  '},
+        {type:'EXPENSE',category:'Labour Tips',payee_name:'raju'},
+        {type:'EXPENSE',category:'LABOUR ADVANCE',payee_name:'Anil'},
+        {type:'EXPENSE',category:'LABOUR PAYMENTS',payee_name:'   '},
+        {type:'EXPENSE',category:'Fuel',payee_name:'Unrelated'},
+        {type:'EXPENSE',category:'Labour Tips',payee_name:'Reversed',reversed_at:'2026-11-23'},
+      ];
+      window.ClearbookAuth={enabled:true,isSignedIn:()=>true};
+      workspaceSession={role:'customer',workspace:{id:'org-a'}};
+      snapshotWorkspaceId='org-a';
+    `);
+    assert.deepEqual(Array.from(run('labourPayeeNames()')),['Anil','Raju']);
+    run("workspaceSession={role:'customer',workspace:{id:'org-b'}}");
+    assert.deepEqual(Array.from(run('labourPayeeNames()')),[],'A different organization must never see names from the previous snapshot.');
+    run("snapshotWorkspaceId='org-b';db.transactions=[{type:'EXPENSE',category:'Labour Tips',payee_name:'Org B worker'}]");
+    assert.deepEqual(Array.from(run('labourPayeeNames()')),['Org B worker']);
+    run("window.ClearbookAuth.isSignedIn=()=>false");
+    assert.deepEqual(Array.from(run('labourPayeeNames()')),[],'Signed-out users must not see stored names.');
+    run('delete window.ClearbookAuth;workspaceSession=null;snapshotWorkspaceId=null;db.transactions=savedTransactions');
+    console.log('PASS: HTTP create/edit/reverse, optional labour payees, organization-scoped name suggestions, search, details and exports.');
   } finally {
     const exited=[server,frontend].map(child=>child.exitCode!==null?Promise.resolve():new Promise(resolve=>child.once('exit',resolve)));
     server.kill();frontend.kill();

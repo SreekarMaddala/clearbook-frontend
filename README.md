@@ -10,6 +10,11 @@ characters) instead of the Vendor selector. Names are stored on each payment;
 no vendor record is created. Names appear in the To column, details, search and
 CSV exports, including the analytics transaction explorer. Existing payments
 without names remain valid. Other categories keep their vendor/staff selection.
+Payee name suggests previously saved names across these three labour categories
+in the current organization. Users can choose a name, type a new one or leave it
+blank. Suggestions ignore capitalization and surrounding spaces, exclude reversed
+payments and are derived from the loaded organization snapshot without a new table
+or browser storage. Names are available after the payment is saved and refreshed.
 
 Vendors, Subcontractors and Staff have separate directory screens. Vendors lists
 payees with the Supplier role; Subcontractors lists those with the Subcontractor
