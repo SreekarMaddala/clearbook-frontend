@@ -8,6 +8,10 @@ action. Signed-in users continue directly to their workspace. Sample records on
 the landing page are illustrative; no organization data is fetched while signed
 out. The 3D scene loads only on the landing page, pauses offscreen and in hidden
 tabs, respects reduced motion, and has a CSS fallback when WebGL is unavailable.
+Scrolling turns and separates the hero ledger layers, moves the floating objects,
+and changes the depth of the product preview and workflow sculptures. Native
+scrolling stays intact. Effects are smaller on mobile, disabled for reduced motion,
+and cleaned up when the landing page is removed.
 
 Run `npm ci` before development. `npm run dev` also builds the 3D bundle. Visit
 `http://127.0.0.1:5173/?landing=1` to preview the signed-out page locally without

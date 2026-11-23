@@ -29,6 +29,7 @@ export function mountScene(container){
  box(3.45,.38,2.66,mint,0,-.28,0);
  box(3.2,.08,2.45,cream,.03,-.045,0,.03);
  const top=box(3.5,.31,2.7,forest,0,.17,0);
+ const ledgerLayers=sculpture.children.map(mesh=>({mesh,y:mesh.position.y}));
  for(let i=0;i<6;i++)box(2.6,.012,.015,new THREE.MeshStandardMaterial({color:0x72935e,roughness:.6}),0,-.5+i*.047,1.278,.005);
  // A small account label is a local procedural texture, with no remote imagery.
  const label=document.createElement('canvas');label.width=1024;label.height=640;
@@ -54,15 +55,17 @@ export function mountScene(container){
  const wire=new THREE.Mesh(new THREE.TubeGeometry(path,90,.018,8,false),new THREE.MeshStandardMaterial({color:0xb1d591,metalness:.6,roughness:.4}));sculpture.add(wire);
  const pulse=new THREE.Mesh(new THREE.SphereGeometry(.075,16,16),cream);sculpture.add(pulse);
  const floor=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.ShadowMaterial({opacity:.2}));floor.rotation.x=-Math.PI/2;floor.position.y=-1.2;floor.receiveShadow=true;scene.add(floor);
- let pointer={x:0,y:0},frame=0,visible=true,destroyed=false;const motion=matchMedia('(prefers-reduced-motion: reduce)');
+ let pointer={x:0,y:0},frame=0,visible=true,destroyed=false,scrollProgress=0,scrollEase=0;const motion=matchMedia('(prefers-reduced-motion: reduce)');
+ const hero=container.closest('.lp-hero');
+ function scroll(){if(!hero||motion.matches){scrollProgress=0;return;}const rect=hero.getBoundingClientRect();scrollProgress=Math.max(0,Math.min(1,-rect.top/rect.height));}
  function resize(){const {width,height}=container.getBoundingClientRect();if(!width||!height)return;renderer.setSize(width,height,false);camera.aspect=width/height;camera.position.set(7,5.7,10);if(camera.aspect<.85)camera.position.multiplyScalar(1.08);camera.updateProjectionMatrix();draw(0);}
  function move(e){const r=container.getBoundingClientRect();pointer={x:(e.clientX-r.left)/r.width-.5,y:(e.clientY-r.top)/r.height-.5};}
- function draw(time){if(destroyed)return;const t=time*.001;if(!motion.matches){sculpture.rotation.y+=(-.15+pointer.x*.22-sculpture.rotation.y)*.035;sculpture.rotation.x+=(pointer.y*.1-sculpture.rotation.x)*.035;sculpture.position.y=Math.sin(t*.65)*.075;coinA.position.y=.55+Math.sin(t*.9)*.15;coinB.position.y=2+Math.cos(t*.8)*.14;ring.rotation.z=.25+Math.sin(t*.7)*.15;pulse.position.copy(path.getPointAt((t*.11)%1));}renderer.render(scene,camera);}
+ function draw(time){if(destroyed)return;const t=time*.001;if(!motion.matches){scrollEase+=(scrollProgress-scrollEase)*.065;sculpture.rotation.y+=(-.15+pointer.x*.22+scrollEase*.75-sculpture.rotation.y)*.035;sculpture.rotation.x+=(pointer.y*.1+scrollEase*.18-sculpture.rotation.x)*.035;sculpture.rotation.z=-.13+scrollEase*.17;sculpture.position.y=Math.sin(t*.65)*.075-scrollEase*.25;for(const [i,layer] of ledgerLayers.entries())layer.mesh.position.y=layer.y+scrollEase*i*.15;labelPlane.position.y=.332+scrollEase*.6;for(const bar of bars)bar.mesh.position.y=.36+bar.height/2+scrollEase*.6;coinA.position.y=.55+Math.sin(t*.9)*.15+scrollEase*.4;coinA.rotation.y=-.35+scrollEase*.85;coinB.position.y=2+Math.cos(t*.8)*.14;ring.rotation.z=.25+Math.sin(t*.7)*.15+scrollEase*.7;ring.position.y=2.35+scrollEase*.3;pulse.position.copy(path.getPointAt((t*.11)%1));}renderer.render(scene,camera);}
  function animate(t){frame=0;if(destroyed||!visible||document.hidden||motion.matches)return;draw(t);frame=requestAnimationFrame(animate);}
  function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden&&visible){draw(performance.now());if(!motion.matches)frame=requestAnimationFrame(animate);}}
  const observer=new ResizeObserver(resize);observer.observe(container);
  const intersection=new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;resume();});intersection.observe(container);
- container.parentElement.addEventListener('pointermove',move);document.addEventListener('visibilitychange',resume);motion.addEventListener('change',resume);
- resize();resume();
- return ()=>{destroyed=true;cancelAnimationFrame(frame);observer.disconnect();intersection.disconnect();container.parentElement?.removeEventListener('pointermove',move);document.removeEventListener('visibilitychange',resume);motion.removeEventListener('change',resume);scene.traverse(o=>{o.geometry?.dispose();if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();});labelTexture.dispose();texture.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
+ container.parentElement.addEventListener('pointermove',move);document.addEventListener('visibilitychange',resume);motion.addEventListener('change',resume);if(hero)window.addEventListener('scroll',scroll,{passive:true});
+ scroll();resize();resume();
+ return ()=>{destroyed=true;cancelAnimationFrame(frame);observer.disconnect();intersection.disconnect();container.parentElement?.removeEventListener('pointermove',move);document.removeEventListener('visibilitychange',resume);motion.removeEventListener('change',resume);window.removeEventListener('scroll',scroll);scene.traverse(o=>{o.geometry?.dispose();if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();});labelTexture.dispose();texture.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
 }

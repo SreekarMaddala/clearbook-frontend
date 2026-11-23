@@ -1,6 +1,6 @@
 'use strict';
 window.ClearbookLanding=(()=>{
- let stopScene=null,root=null,token=0;
+ let stopScene=null,stopScroll=null,root=null,token=0;
  const mark=`<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="currentColor"/><path d="M27 15a10 10 0 1 0 0 12M17 21l5 5 9-12" fill="none" stroke="#c5efb0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
  const symbols={payment:'↗',people:'◉',perspective:'▥'};
  const previews={
@@ -13,7 +13,39 @@ window.ClearbookLanding=(()=>{
  function chooseTab(key,focus=false){if(!previews[key]||!root)return;root.querySelectorAll('[data-lp-tab]').forEach(button=>{const selected=button.dataset.lpTab===key;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;if(selected&&focus)button.focus();});const panel=root.querySelector('#lp-preview');panel.innerHTML=preview(key);panel.setAttribute('aria-labelledby','lp-tab-'+key);}
  function click(event){const target=event.target.closest('[data-lp-scroll],[data-lp-tab]');if(!target)return;if(target.dataset.lpScroll)root.querySelector('#'+target.dataset.lpScroll)?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});if(target.dataset.lpTab)chooseTab(target.dataset.lpTab);}
  function keydown(event){const tab=event.target.closest('[data-lp-tab]');if(!tab||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const keys=Object.keys(previews),index=keys.indexOf(tab.dataset.lpTab);chooseTab(keys[event.key==='Home'?0:event.key==='End'?2:(index+(event.key==='ArrowRight'?1:2))%3],true);}
- function destroy(){token++;if(stopScene){stopScene();stopScene=null;}if(root){root.removeEventListener('click',click);root.removeEventListener('keydown',keydown);root=null;}}
- function mount(container){destroy();if(!container.querySelector)return;root=container.querySelector('#clearbook-landing');if(!root)return;root.addEventListener('click',click);root.addEventListener('keydown',keydown);const stage=root.querySelector('#lp-scene'),current=token;import('./assets/landing-scene.js').then(module=>{if(current!==token||!stage.isConnected)return;stopScene=module.mountScene(stage);}).catch(()=>{/* The CSS sculpture remains visible if WebGL is unavailable. */});}
+ function mountScrollEffects(page){
+  const motion=matchMedia('(prefers-reduced-motion: reduce)'),hero=page.querySelector('.lp-hero');
+  const targets=[...page.querySelectorAll('.lp-section-top,.lp-preview,.lp-workflow-grid article,.lp-access')];
+  let frame=0,disposed=false;
+  const clamp=n=>Math.max(0,Math.min(1,n));
+  function update(){
+   frame=0;if(disposed)return;
+   page.classList.toggle('lp-scroll-ready',!motion.matches);
+   if(motion.matches){page.style.removeProperty('--lp-hero-scroll');return;}
+   const height=innerHeight,small=innerWidth<760;
+   // Read positions together before writing transforms; leave native scrolling intact.
+   const positions=targets.map(el=>({el,rect:el.getBoundingClientRect()}));
+   const heroRect=hero.getBoundingClientRect();
+   page.style.setProperty('--lp-hero-scroll',clamp(-heroRect.top/heroRect.height).toFixed(4));
+   for(const {el,rect} of positions){
+    const enter=clamp((height-rect.top)/(height*.42));
+    const progress=clamp((height-rect.top)/(height+rect.height));
+    const strength=small?.45:1;
+    el.style.setProperty('--lp-enter',enter.toFixed(4));
+    el.style.setProperty('--lp-depth-y',((1-enter)*32*strength).toFixed(2)+'px');
+    el.style.setProperty('--lp-depth-x',((1-enter)*9*strength).toFixed(2)+'deg');
+    el.style.setProperty('--lp-object-turn',((.5-progress)*60*strength).toFixed(2)+'deg');
+    el.style.setProperty('--lp-object-rise',((.5-progress)*36*strength).toFixed(2)+'px');
+    el.style.setProperty('--lp-demo-turn',((.5-progress)*11*strength).toFixed(2)+'deg');
+   }
+  }
+  function schedule(){if(!frame&&!disposed)frame=requestAnimationFrame(update);}
+  const observer=new ResizeObserver(schedule);observer.observe(page);
+  window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule,{passive:true});motion.addEventListener('change',schedule);
+  update();
+  return ()=>{disposed=true;cancelAnimationFrame(frame);observer.disconnect();window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);motion.removeEventListener('change',schedule);page.classList.remove('lp-scroll-ready');};
+ }
+ function destroy(){token++;if(stopScroll){stopScroll();stopScroll=null;}if(stopScene){stopScene();stopScene=null;}if(root){root.removeEventListener('click',click);root.removeEventListener('keydown',keydown);root=null;}}
+ function mount(container){destroy();if(!container.querySelector)return;root=container.querySelector('#clearbook-landing');if(!root)return;root.addEventListener('click',click);root.addEventListener('keydown',keydown);stopScroll=mountScrollEffects(root);const stage=root.querySelector('#lp-scene'),current=token;import('./assets/landing-scene.js').then(module=>{if(current!==token||!stage.isConnected)return;stopScene=module.mountScene(stage);}).catch(()=>{/* The CSS sculpture remains visible if WebGL is unavailable. */});}
  return {render,mount,destroy};
 })();
