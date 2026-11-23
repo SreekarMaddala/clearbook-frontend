@@ -4,6 +4,13 @@ Independent frontend repository. Backend: sibling `clearbook-backend` repository
 
 ## Staff and salaries
 
+LABOUR PAYMENTS, Labour Tips and LABOUR ADVANCE are default categories. For these
+three categories the transaction form shows an optional Payee name (up to 120
+characters) instead of the Vendor selector. Names are stored on each payment;
+no vendor record is created. Names appear in the To column, details, search and
+CSV exports, including the analytics transaction explorer. Existing payments
+without names remain valid. Other categories keep their vendor/staff selection.
+
 Vendors, Subcontractors and Staff have separate directory screens. Vendors lists
 payees with the Supplier role; Subcontractors lists those with the Subcontractor
 role. Payees with multiple roles appear in each matching directory, using the

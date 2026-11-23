@@ -180,4 +180,17 @@ controller.handleChange({dataset:{anSetting:'month'},value:'2026-10'});
 const reopened=browser.ClearbookAnalytics.create();
 assert.ok(reopened.render(latestContext).includes('type="month" data-an-setting="month" value="2026-10"'));
 assert.ok(repaints>=8);
+latestContext={...latestContext,workspaceId:'org-labour',data:{...data,transactions:[
+ tx('labour','EXPENSE',750,{date:'2026-11-20',category:'LABOUR PAYMENTS',payee_name:'Raju <team>'}),
+ tx('unnamed-labour','EXPENSE',500,{date:'2026-11-20',category:'Labour Tips'}),
+]}};
+html=controller.render(latestContext);
+assert.ok(html.includes('Raju &lt;team&gt;'));
+assert.ok(!html.includes('Raju <team>'));
+controller.handleSearch({dataset:{anSearch:''},value:'Raju'});
+assert.ok(html.includes('data-detail="labour"'));
+assert.ok(!html.includes('data-detail="unnamed-labour"'));
+controller.handleClick({dataset:{anAction:'export-ledger'}});
+assert.ok(exportedTexts.at(-1).includes('Raju <team>'));
+assert.ok(exportedTexts.at(-1).includes('"750.00"'));
 console.log('PASS: analytics amounts, account flows, comparisons, filters, reversed records, chart aggregation, exports, saved views and workspace isolation.');
