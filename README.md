@@ -10,9 +10,8 @@ role. Payees with multiple roles appear in each matching directory, using the
 same record and payment history. Each Add form selects its directory role by
 default. Staff-only payees appear only in Staff.
 Choose Add staff to enter an employee and job title, then Record salary to
-select the salary month, amount, payment date and paying account. Salary month
-is the month the payment covers, independently of when it was paid.
-Existing salary payments with no recorded month display Not recorded in details.
+enter the amount, payment date and paying account. Salary month is no longer
+requested in the transaction form or shown in transaction details.
 Staff totals and exports exclude reversed salary payments. Salary month is also
 included in transaction CSV exports only when at least one exported payment has
 a recorded salary month. Otherwise, the column is omitted.
@@ -72,7 +71,7 @@ The backend [provider access and deployment guide](../clearbook-backend/backend/
 
 ## Clients and incoming credits
 
-Customer workspaces have a Clients directory with add/edit forms and receipt history. When adding a transaction, choose Expense, Payback or Credit. Credit requires a client, receiving business account, amount, date, payment mode and location; a receipt is optional. Use + Add client in the Credit form to onboard a client without losing entered values. Purpose / Notes remain hidden.
+Customer workspaces have a Clients directory with add/edit forms and receipt history. When adding a transaction, choose Expense, Payback or Credit. Credit requires a client, receiving business account, amount, date, payment mode and location. Remarks are optional for every transaction. Use + Add client in the Credit form to onboard a client without losing entered values. Click a transaction row to view its details and remarks.
 
 Credits appear as Received, can be filtered by client or account, and are included in CSV exports and dashboard client receipt totals. Account cards show client credits, incoming, outgoing and net movement; net movement excludes opening balances. Existing transfers remain visible and editable under their original type, while new-entry options offer Credit in place of Transfer.
 
