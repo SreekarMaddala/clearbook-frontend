@@ -70,6 +70,12 @@ The UI resolves access through `/api/session`. Software-provider accounts see Cu
 
 ## Verification
 
+Transaction filters support multiple accounts, clients, payees, categories and
+locations through checkbox dropdowns. A record can match any selected value in
+one dropdown and must match each active filter. Payees includes vendor records
+and saved labour payee names. Date range, search, pagination and CSV exports use
+the same filtered records. Clear filters resets all selections.
+
 `npm run check` checks JavaScript syntax. `npm test` covers PKCE, callback validation, session renewal and logout with mocked Cognito responses. `npm run build` creates static output. `npm run test:integration` starts an isolated backend and this repository's development proxy, then exercises the actual frontend handlers against the HTTP API. It requires the backend checkout alongside this one, or `CLEARBOOK_BACKEND_DIR` pointing at it. Python and the backend's development requirements must be installed. The test uses DOM stubs; it is not a visual browser test.
 
 Changes load on startup, after saves and through **Refresh**. No endpoint polling is used. Each transaction has a location; expenses can select a vendor.

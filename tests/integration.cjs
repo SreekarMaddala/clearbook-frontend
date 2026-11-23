@@ -409,6 +409,52 @@ const {spawn} = require('node:child_process');
     run("window.ClearbookAuth.isSignedIn=()=>false");
     assert.deepEqual(Array.from(run('labourPayeeNames()')),[],'Signed-out users must not see stored names.');
     run('delete window.ClearbookAuth;workspaceSession=null;snapshotWorkspaceId=null;db.transactions=savedTransactions');
+    const beforeMultiFilterRequests=requests.length;
+    run(`
+      db.transactions=Array.from({length:14},(_,i)=>({
+        id:'multi-'+String(i).padStart(2,'0'),type:'EXPENSE',amount:10,date:'2026-11-20',
+        category:i%2?'Labour Tips':'LABOUR PAYMENTS',payee_name:i%2?'Anil':'Raju',
+        location:['Site A','Site B','Site C'][i%3],payer:i===13?'other':'business',
+        recipient:i===13?'business':null,status:['paid','Paid'],mode:'CASH'
+      }));
+      page='transactions';showFilters=true;filters={};tab='all';search='';pageNumber=2;render();
+    `);
+    assert.ok(node('#main').innerHTML.includes('data-filter-group="category"'));
+    assert.ok(node('#main').innerHTML.includes('type="checkbox" data-filter="category"'));
+    const selectFilter=(key,value,checked=true)=>handlers.change({target:{type:'checkbox',dataset:{filter:key},value,checked}});
+    selectFilter('category','LABOUR PAYMENTS');
+    assert.equal(run('pageNumber'),1);
+    assert.equal(run('filteredTransactions().length'),7);
+    selectFilter('category','Labour Tips');
+    assert.equal(run('filteredTransactions().length'),14,'Values within the same filter use OR.');
+    selectFilter('location','Site A');
+    selectFilter('location','Site B');
+    assert.equal(run('filteredTransactions().length'),10,'Different filters use AND.');
+    selectFilter('payer','business');
+    assert.equal(run('filteredTransactions().length'),10,'Account filter includes both source and destination.');
+    selectFilter('vendor','name:raju');
+    assert.equal(run('filteredTransactions().length'),5);
+    run('exportCSV()');
+    const multiCsv=await csvBlob.text();
+    assert.ok(multiCsv.includes('"TOTAL transaction value (excluding reversed)"'));
+    assert.ok(multiCsv.includes('"50.00"'));
+    assert.ok(!multiCsv.includes('Anil'));
+    selectFilter('vendor','name:anil');
+    assert.equal(run('filteredTransactions().length'),10);
+    selectFilter('vendor','name:raju',false);
+    assert.equal(run('filteredTransactions().length'),5);
+    handlers.change({target:{dataset:{filter:'from'},value:'2026-11-21'}});
+    assert.equal(run('filteredTransactions().length'),0);
+    await handlers.click({target:{closest:()=>({dataset:{action:'clear-filters'}})}});
+    assert.equal(run('filteredTransactions().length'),14);
+    assert.equal(run('pageNumber'),1);
+    assert.ok(node('#main').innerHTML.includes('Showing 1–10 of 14'));
+    await handlers.click({target:{closest:()=>({dataset:{pagination:'2'}})}});
+    assert.ok(node('#main').innerHTML.includes('Showing 11–14 of 14'));
+    run("filters={client:['client-a','client-b']};db.transactions[0].client_id='client-a';db.transactions[1].client_id='client-b'");
+    assert.equal(run('filteredTransactions().length'),2);
+    assert.equal(requests.length,beforeMultiFilterRequests,'Multiple filters operate on the loaded snapshot without API requests.');
+    run('db.transactions=savedTransactions;filters={};pageNumber=1');
     console.log('PASS: HTTP create/edit/reverse, optional labour payees, organization-scoped name suggestions, search, details and exports.');
   } finally {
     const exited=[server,frontend].map(child=>child.exitCode!==null?Promise.resolve():new Promise(resolve=>child.once('exit',resolve)));
