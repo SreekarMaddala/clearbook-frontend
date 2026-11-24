@@ -28,7 +28,7 @@ const {chromium}=require('playwright');
    assert.equal(await page.evaluate(()=>window.sceneUnderTest===document.querySelector('#lp-scene canvas')),true,'One continuous canvas through every phase.');
   }
   await story(.1,'work');const fixedBounds=await page.locator('#lp-scene canvas').boundingBox();
-  await story(.25,'strike');await story(.65,'transform');await story(.98,'recorded');
+  await story(.25,'strike');await story(.65,'transform');await story(.8,'transform');await page.screenshot({path:path.join(out,'coin-falling.png')});await story(.94,'recorded');await story(.995,'recorded');
   assert.deepEqual(await page.locator('#lp-scene canvas').boundingBox(),fixedBounds,'Camera viewport stays pinned during the story.');
   assert.equal(await page.locator('.lp-build-payment').evaluate(el=>getComputedStyle(el).opacity),'1');
   await page.screenshot({path:path.join(out,'recorded.png')});

@@ -18,12 +18,12 @@ window.ClearbookLanding=(()=>{
   const targets=[...page.querySelectorAll('.lp-section-top,.lp-preview,.lp-workflow-grid article,.lp-access')];
   let frame=0,disposed=false;
   const clamp=n=>Math.max(0,Math.min(1,n));
-  const story=[['ON SITE','Two people. One job. Real work.'],['THE STRIKE','Every effort starts something.'],['THE TRANSFORMATION','Hard work becomes value.'],['PAYMENT RECORDED','Work done. Payments clear.']];
+  const story=[['ON SITE','Two people. One job. Real work.'],['THE STRIKE','Every effort starts something.'],['THE TRANSFORMATION','From hard work to value in motion.'],['PAYMENT RECORDED','Work done. Payments clear.']];
   let lastStep=-1;
   function updateStory(progress){
    page.style.setProperty('--lp-work-progress',progress.toFixed(4));
-   const payment=clamp((progress-.84)/.12);page.style.setProperty('--lp-payment-reveal',payment.toFixed(4));
-   const step=progress<.16?0:progress<.4?1:progress<.84?2:3;
+   const payment=clamp((progress-.88)/.1);page.style.setProperty('--lp-payment-reveal',payment.toFixed(4));
+   const step=progress<.14?0:progress<.32?1:progress<.88?2:3;
    if(step!==lastStep){
     page.querySelector('[data-work-label]').textContent=story[step][0];page.querySelector('[data-work-description]').textContent=story[step][1];
     for(const el of page.querySelectorAll('[data-work-step]'))el.setAttribute('aria-current',Number(el.dataset.workStep)===step?'step':'false');

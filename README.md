@@ -10,6 +10,8 @@ out. The 3D scene loads only on the landing page, pauses offscreen and in hidden
 tabs, respects reduced motion, and has a CSS fallback when WebGL is unavailable.
 The hero keeps its camera and worksite fixed while scrolling drives two workers,
 a hammer strike, and a fragment that morphs from rough stone into a rupee coin.
+The formed coin spins downward with a short trail, bounces on the worksite, and
+triggers expanding rings and sparks; effects are driven by scroll and reverse with it.
 Reversing scroll reverses the sequence. A clearly marked sample payment appears
 at the end. The scene renders only while its pose changes, pauses offscreen and
 in hidden tabs, and shows a static final pose for reduced motion. Native scrolling
@@ -20,6 +22,15 @@ Run `npm ci` before development. `npm run dev` also builds the 3D bundle. Visit
 starting the backend. `npm run build` bundles the scene and copies its assets.
 `npm run test:landing` runs desktop/mobile and login-handoff checks using an
 installed Edge browser on Windows (override with `PLAYWRIGHT_CHANNEL`).
+
+
+The Cognito classic login uses matching static construction artwork and green form
+styling. Run `node scripts/build-auth-header.cjs` to render the JPEG from the local
+construction scene, then `python scripts/deploy-auth-branding.py --apply` to update
+only this app client's image and CSS. The deployment script backs up its previous
+image and CSS under `.local/auth-branding/` before applying and verifying the theme.
+Cognito classic supports image/CSS branding rather than the landing's WebGL motion;
+users, passwords, OAuth settings and callback URLs are unchanged.
 
 
 Independent frontend repository. Backend: sibling `clearbook-backend` repository. The landing page uses Three.js, bundled with esbuild; browser checks use Playwright.
