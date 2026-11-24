@@ -54,13 +54,32 @@ export function mountScene(container){
  const path=new THREE.CatmullRomCurve3([new THREE.Vector3(-2.4,-.7,1.6),new THREE.Vector3(-3,.3,.4),new THREE.Vector3(-1.4,2.8,-1.4),new THREE.Vector3(1.5,3.1,-1.1),new THREE.Vector3(2.6,1.5,.6)]);
  const wire=new THREE.Mesh(new THREE.TubeGeometry(path,90,.018,8,false),new THREE.MeshStandardMaterial({color:0xb1d591,metalness:.6,roughness:.4}));sculpture.add(wire);
  const pulse=new THREE.Mesh(new THREE.SphereGeometry(.075,16,16),cream);sculpture.add(pulse);
+ // The same sculpture continues into the second frame, with a reflected image.
+ const reflection=sculpture.clone(true),reflectionMaterials=[];
+ reflection.traverse(object=>{object.castShadow=false;object.receiveShadow=false;if(object.material){object.material=object.material.clone();object.material.transparent=true;object.material.opacity=0;object.material.depthWrite=false;object.material.side=THREE.DoubleSide;reflectionMaterials.push(object.material);}});
+ reflection.matrixAutoUpdate=false;reflection.visible=false;scene.add(reflection);
+ const mirrorMatrix=new THREE.Matrix4().makeTranslation(0,-2.4,0).multiply(new THREE.Matrix4().makeScale(1,-1,1));
  const floor=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.ShadowMaterial({opacity:.2}));floor.rotation.x=-Math.PI/2;floor.position.y=-1.2;floor.receiveShadow=true;scene.add(floor);
  let pointer={x:0,y:0},frame=0,visible=true,destroyed=false,scrollProgress=0,scrollEase=0;const motion=matchMedia('(prefers-reduced-motion: reduce)');
- const hero=container.closest('.lp-hero');
- function scroll(){if(!hero||motion.matches){scrollProgress=0;return;}const rect=hero.getBoundingClientRect();scrollProgress=Math.max(0,Math.min(1,-rect.top/rect.height));}
+ const hero=container.closest('.lp-journey')||container.closest('.lp-hero');
+ function scroll(){if(!hero||motion.matches){scrollProgress=0;return;}const rect=hero.getBoundingClientRect();const distance=hero.classList.contains('lp-journey')?hero.offsetHeight-innerHeight:rect.height;scrollProgress=Math.max(0,Math.min(1,-rect.top/Math.max(1,distance)));}
  function resize(){const {width,height}=container.getBoundingClientRect();if(!width||!height)return;renderer.setSize(width,height,false);camera.aspect=width/height;camera.position.set(7,5.7,10);if(camera.aspect<.85)camera.position.multiplyScalar(1.08);camera.updateProjectionMatrix();draw(0);}
  function move(e){const r=container.getBoundingClientRect();pointer={x:(e.clientX-r.left)/r.width-.5,y:(e.clientY-r.top)/r.height-.5};}
- function draw(time){if(destroyed)return;const t=time*.001;if(!motion.matches){scrollEase+=(scrollProgress-scrollEase)*.065;sculpture.rotation.y+=(-.15+pointer.x*.22+scrollEase*.75-sculpture.rotation.y)*.035;sculpture.rotation.x+=(pointer.y*.1+scrollEase*.18-sculpture.rotation.x)*.035;sculpture.rotation.z=-.13+scrollEase*.17;sculpture.position.y=Math.sin(t*.65)*.075-scrollEase*.25;for(const [i,layer] of ledgerLayers.entries())layer.mesh.position.y=layer.y+scrollEase*i*.15;labelPlane.position.y=.332+scrollEase*.6;for(const bar of bars)bar.mesh.position.y=.36+bar.height/2+scrollEase*.6;coinA.position.y=.55+Math.sin(t*.9)*.15+scrollEase*.4;coinA.rotation.y=-.35+scrollEase*.85;coinB.position.y=2+Math.cos(t*.8)*.14;ring.rotation.z=.25+Math.sin(t*.7)*.15+scrollEase*.7;ring.position.y=2.35+scrollEase*.3;pulse.position.copy(path.getPointAt((t*.11)%1));}renderer.render(scene,camera);}
+ function draw(time){if(destroyed)return;const t=time*.001;if(!motion.matches){scrollEase+=(scrollProgress-scrollEase)*.065;sculpture.rotation.y+=(-.15+pointer.x*.22+scrollEase*.75-sculpture.rotation.y)*.035;sculpture.rotation.x+=(pointer.y*.1+scrollEase*.18-sculpture.rotation.x)*.035;sculpture.rotation.z=-.13+scrollEase*.17;sculpture.position.y=Math.sin(t*.65)*.075-scrollEase*.25;for(const [i,layer] of ledgerLayers.entries())layer.mesh.position.y=layer.y+scrollEase*i*.15;labelPlane.position.y=.332+scrollEase*.6;for(const bar of bars)bar.mesh.position.y=.36+bar.height/2+scrollEase*.6;coinA.position.y=.55+Math.sin(t*.9)*.15+scrollEase*.4;coinA.rotation.y=-.35+scrollEase*.85;coinB.position.y=2+Math.cos(t*.8)*.14;ring.rotation.z=.25+Math.sin(t*.7)*.15+scrollEase*.7;ring.position.y=2.35+scrollEase*.3;pulse.position.copy(path.getPointAt((t*.11)%1));}if(motion.matches){
+   scrollEase=0;sculpture.rotation.set(0,-.15,-.13);sculpture.position.y=0;
+   for(const layer of ledgerLayers)layer.mesh.position.y=layer.y;
+   labelPlane.position.y=.332;for(const bar of bars)bar.mesh.position.y=.36+bar.height/2;
+   coinA.position.y=.55;coinA.rotation.y=-.35;coinB.position.y=2;ring.rotation.z=.25;ring.position.y=2.35;
+  }
+  const arrival=THREE.MathUtils.smoothstep(scrollEase,.34,.8);
+  camera.lookAt(0,.3-arrival*.65,0);
+  reflection.visible=arrival>.01;
+  if(reflection.visible){
+   for(let i=0;i<sculpture.children.length;i++){const original=sculpture.children[i],copy=reflection.children[i];copy.position.copy(original.position);copy.rotation.copy(original.rotation);copy.scale.copy(original.scale);}
+   sculpture.updateMatrix();reflection.matrix.copy(mirrorMatrix).multiply(sculpture.matrix);reflection.matrixWorldNeedsUpdate=true;
+   for(const material of reflectionMaterials)material.opacity=arrival*.14;
+  }
+  renderer.render(scene,camera);}
  function animate(t){frame=0;if(destroyed||!visible||document.hidden||motion.matches)return;draw(t);frame=requestAnimationFrame(animate);}
  function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden&&visible){draw(performance.now());if(!motion.matches)frame=requestAnimationFrame(animate);}}
  const observer=new ResizeObserver(resize);observer.observe(container);

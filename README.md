@@ -12,6 +12,11 @@ Scrolling turns and separates the hero ledger layers, moves the floating objects
 and changes the depth of the product preview and workflow sculptures. Native
 scrolling stays intact. Effects are smaller on mobile, disabled for reduced motion,
 and cleaned up when the landing page is removed.
+The opening is a continuous two-frame scroll chapter: the same canvas and ledger
+move from the hero into a framed workspace scene, with a mirrored reflection.
+Scroll position controls the handoff in either direction. Reduced motion replaces
+the pinned transition with two normal-flow sections and a static second-frame
+sculpture. Hidden scene controls leave keyboard navigation during the transition.
 
 Run `npm ci` before development. `npm run dev` also builds the 3D bundle. Visit
 `http://127.0.0.1:5173/?landing=1` to preview the signed-out page locally without
