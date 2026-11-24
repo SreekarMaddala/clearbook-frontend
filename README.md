@@ -12,6 +12,12 @@ The hero keeps its camera and worksite fixed while scrolling drives two workers,
 a hammer strike, and a fragment that morphs from rough stone into a rupee coin.
 The formed coin spins downward with a short trail, bounces on the worksite, and
 triggers expanding rings and sparks; effects are driven by scroll and reverse with it.
+The same coin mesh then leaves the worksite and follows a continuous path through
+platform, payment, people, workflow, access and footer stations. A fixed transparent
+renderer carries only the coin; content and the worksite remain steady. Its overlay
+ignores pointer events, reuses its renderer, supports reverse scrolling, and returns
+the mesh to the original scene when scrolling back. Mobile uses smaller coins and
+separate station spacing; reduced motion uses static coin artwork.
 Reversing scroll reverses the sequence. A clearly marked sample payment appears
 at the end. The scene renders only while its pose changes, pauses offscreen and
 in hidden tabs, and shows a static final pose for reduced motion. Native scrolling

@@ -32,7 +32,25 @@ const {chromium}=require('playwright');
   assert.deepEqual(await page.locator('#lp-scene canvas').boundingBox(),fixedBounds,'Camera viewport stays pinned during the story.');
   assert.equal(await page.locator('.lp-build-payment').evaluate(el=>getComputedStyle(el).opacity),'1');
   await page.screenshot({path:path.join(out,'recorded.png')});
+  async function visitStation(name){
+   await page.evaluate(name=>{const el=document.querySelector('[data-coin-anchor="'+name+'"]'),r=el.getBoundingClientRect();scrollTo(0,name==='finish'?document.documentElement.scrollHeight:scrollY+r.top+r.height*.46-innerHeight*.48);},name);
+   await page.waitForFunction(()=>{const layer=document.querySelector('.lp-coin-journey');return layer&&getComputedStyle(layer).opacity==='1';});
+   assert.equal(await page.locator('.lp-coin-journey').evaluate(el=>getComputedStyle(el).pointerEvents),'none','The coin never intercepts page controls.');
+   assert.equal(await page.locator('.lp-coin-journey canvas').count(),1,'One journey renderer is reused across sections.');
+  }
+  await visitStation('platform');await page.screenshot({path:path.join(out,'journey-platform.png')});
+  const journeyCanvas=await page.locator('.lp-coin-journey canvas').evaluate(el=>{window.journeyCanvasUnderTest=el;return !!el;});assert.ok(journeyCanvas);
+  for(const station of ['payment','people','records','team','insights','access','finish']){
+   await visitStation(station);
+   assert.equal(await page.evaluate(()=>window.journeyCanvasUnderTest===document.querySelector('.lp-coin-journey canvas')),true,'Journey does not remount between sections.');
+  }
+  await page.screenshot({path:path.join(out,'journey-finish.png')});
+  assert.equal(await page.locator('.landing-page').getAttribute('data-coin-journey'),'finish');
+  await page.setViewportSize({width:390,height:844});
+  for(const station of ['platform','payment','people','access','finish']){await visitStation(station);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+  await page.setViewportSize({width:1440,height:1050});
   await story(.1,'work');
+  assert.equal(await page.locator('.lp-coin-journey').evaluate(el=>getComputedStyle(el).opacity),'0','Returning to the worksite restores the original coin.');
   const firstObject=page.locator('.lp-workflow-grid .lp-object').first();
   await firstObject.scrollIntoViewIfNeeded();
   const beforeTurn=await firstObject.evaluate(el=>el.closest('article').style.getPropertyValue('--lp-object-turn'));
@@ -53,6 +71,7 @@ const {chromium}=require('playwright');
   await page.waitForFunction(()=>!document.querySelector('#clearbook-landing').classList.contains('lp-scroll-ready'));
   await page.waitForFunction(()=>document.querySelector('#clearbook-landing').dataset.workPhase==='recorded');
   assert.equal(await page.locator('.lp-construction-viewport').evaluate(el=>getComputedStyle(el).position),'relative');
+  assert.equal(await page.locator('.lp-coin-journey').evaluate(el=>getComputedStyle(el).display),'none','Reduced motion uses static station artwork.');
   for(const width of [360,390,768,1920]){
    await page.setViewportSize({width,height:900});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Horizontal overflow at '+width);
@@ -68,6 +87,6 @@ const {chromium}=require('playwright');
   assert.equal(url.searchParams.get('redirect_uri'),'http://127.0.0.1:5178/');
   assert.ok(url.searchParams.get('state'));
   assert.deepEqual(errors,[]);
-  console.log('PASS: real WebGL, fixed construction viewport, reversible rock-to-coin story, mobile layout, product tabs, keyboard navigation, reduced motion, no customer API requests and Cognito PKCE handoff.');
+  console.log('PASS: real WebGL, fixed construction viewport, reversible rock-to-coin story, continuous journey through all sections, mobile layout, product tabs, keyboard navigation, reduced motion, no customer API requests and Cognito PKCE handoff.');
  }finally{if(browser)await browser.close();server.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

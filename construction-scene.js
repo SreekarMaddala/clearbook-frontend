@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {coinMotionAtProgress} from './construction-motion.mjs';
+import {mountCoinJourney} from './coin-journey.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 // One fixed camera and one fixed set. Scroll controls the workers and one fragment.
@@ -107,6 +108,7 @@ export function mountConstructionScene(container,options={}){
  const dustMaterial=new THREE.MeshStandardMaterial({color:0xc5cab6,transparent:true,opacity:0,roughness:1,depthWrite:false});materials.push(dustMaterial);
  const dust=Array.from({length:16},(_,i)=>{const m=mesh(new THREE.IcosahedronGeometry(.025+(i%3)*.012,0),dustMaterial);m.castShadow=false;return m;});
  const floor=mesh(new THREE.PlaneGeometry(100,100),new THREE.ShadowMaterial({opacity:.2}));floor.rotation.x=-Math.PI/2;floor.position.y=-.44;floor.castShadow=false;
+ const journey=options.pose===undefined?mountCoinJourney({coin:fragmentGroup,container,camera,world}):null;
  const chapter=container.closest('.lp-construction-chapter'),motion=matchMedia('(prefers-reduced-motion: reduce)');
  const clamp=n=>THREE.MathUtils.clamp(n,0,1),smooth=(a,b,p)=>THREE.MathUtils.smoothstep(p,a,b);
  let wanted=0,current=0,frame=0,visible=true,disposed=false;
@@ -142,15 +144,16 @@ export function mountConstructionScene(container,options={}){
   glint.rotation.z=p*2;
   const burst=clamp((p-.31)/.18);dustMaterial.opacity=p>.31&&p<.49?Math.sin(burst*Math.PI)*.6:0;
   dust.forEach((m,i)=>{const a=i*2.399;m.position.set(hit.x+Math.cos(a)*burst*(.35+i*.018),hit.y+burst*(.75-(i%4)*.13)-burst*burst*.65,hit.z+Math.sin(a)*burst*.6);m.scale.setScalar(1-burst*.6);});
+  journey?.update();
   renderer.render(scene,camera);
  }
  function animate(){frame=0;if(disposed||!visible||document.hidden)return;current+=(wanted-current)*.15;if(Math.abs(wanted-current)<.0002)current=wanted;renderPose(current);if(Math.abs(wanted-current)>.0002)frame=requestAnimationFrame(animate);}
  function request(){if(options.pose!==undefined){renderPose(options.pose);return;}if(!frame&&visible&&!document.hidden&&!disposed){if(motion.matches){renderPose(1);return;}frame=requestAnimationFrame(animate);}}
  function resize(){const r=container.getBoundingClientRect();if(!r.width||!r.height)return;renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();renderPose(options.pose??(motion.matches?1:current));}
  function preference(){scroll();resize();}
- const sizeObserver=new ResizeObserver(resize);sizeObserver.observe(container);
- const intersection=new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;request();});intersection.observe(container);
+ const sizeObserver=new ResizeObserver(resize);sizeObserver.observe(container);if(options.pose===undefined)sizeObserver.observe(container.closest('.landing-page'));
+ const intersection=new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;request();});intersection.observe(options.pose===undefined?container.closest('.landing-page'):container);
  window.addEventListener('scroll',scroll,{passive:true});document.addEventListener('visibilitychange',request);motion.addEventListener('change',preference);
  scroll();resize();
- return ()=>{disposed=true;cancelAnimationFrame(frame);sizeObserver.disconnect();intersection.disconnect();window.removeEventListener('scroll',scroll);document.removeEventListener('visibilitychange',request);motion.removeEventListener('change',preference);scene.traverse(o=>o.geometry?.dispose());for(const m of new Set(materials))m.dispose();floor.material.dispose();coinTexture.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
+ return ()=>{disposed=true;journey?.destroy();cancelAnimationFrame(frame);sizeObserver.disconnect();intersection.disconnect();window.removeEventListener('scroll',scroll);document.removeEventListener('visibilitychange',request);motion.removeEventListener('change',preference);scene.traverse(o=>o.geometry?.dispose());for(const m of new Set(materials))m.dispose();floor.material.dispose();coinTexture.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
 }

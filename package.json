@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/dev-server.cjs",
     "build": "node scripts/build.cjs",
-    "check": "node --check app.js && node --check auth.js && node --check provider.js && node --check analytics.js && node --check landing.js && node --check landing-scene.js && node --check construction-scene.js && node --check construction-motion.mjs",
+    "check": "node --check app.js && node --check auth.js && node --check provider.js && node --check analytics.js && node --check landing.js && node --check landing-scene.js && node --check construction-scene.js && node --check construction-motion.mjs && node --check coin-journey.js",
     "test": "node tests/auth.cjs && node tests/auth-gate.cjs && node tests/provider.cjs && node tests/analytics.cjs && node tests/construction-motion.cjs",
     "test:integration": "node tests/integration.cjs",
     "test:landing": "node tests/landing.cjs"
