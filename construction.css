@@ -1,0 +1,54 @@
+/* A fixed construction set. Only the workers, tool, fragment and coin animate. */
+.landing-page{overflow:clip}
+.lp-construction-chapter{height:260svh;position:relative;background:#102c24}
+.lp-construction-viewport{position:sticky;top:0;height:100svh;min-height:760px;overflow:clip}
+.lp-construction-viewport>.lp-hero{height:100%;min-height:0}
+.lp-construction-viewport .lp-hero-copy{padding-top:70px;transform:none!important}
+.lp-construction-viewport h1{font-size:clamp(65px,6.7vw,106px);letter-spacing:-6px}
+.lp-construction-art{width:60%;right:-4%;height:100%;transform:none!important}
+.lp-construction-art canvas{pointer-events:none}
+.lp-construction-art .lp-art-caption{bottom:13%;right:18%;font-size:9px}
+.lp-build-story{margin-top:28px;max-width:365px}
+.lp-build-status>span{font-size:9px;letter-spacing:2px;color:#b3d795;display:block}
+.lp-build-status>p{font-size:15px;line-height:1.5;color:#d5e5cb;margin:7px 0 18px;min-height:23px}
+.lp-build-timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;position:relative;border-top:1px solid #b1cf9c35;padding-top:10px}
+.lp-build-timeline:before{position:absolute;content:'';height:2px;left:0;top:-1px;width:100%;transform:scaleX(var(--lp-work-progress,0));transform-origin:left;background:#c7efa8}
+.lp-build-timeline>span{font-size:10px;color:#749279}
+.lp-build-timeline>span[aria-current=step]{color:#c7efa8}
+.lp-construction-viewport .lp-hero-note{margin-top:23px}
+.lp-build-payment{position:absolute;z-index:5;right:14%;top:17%;display:flex;align-items:center;gap:13px;padding:17px 22px;border:1px solid #c6e9ab40;background:#e5f6d314;backdrop-filter:blur(14px);border-radius:12px;box-shadow:0 15px 35px #041c172b;opacity:var(--lp-payment-reveal,0);visibility:visible;pointer-events:none}
+.lp-build-check{display:grid;place-items:center;width:39px;height:39px;background:#c3eaa333;border-radius:50%;color:#cff5ac;font-size:21px}
+.lp-build-payment small{display:block;font-size:7px;letter-spacing:1px;color:#a8bd9d}
+.lp-build-payment strong{display:block;font:500 29px Manrope;color:#e6f6d7;letter-spacing:-1px;margin:4px 0}
+.lp-build-payment div>span{display:block;font-size:10px;color:#acc29f}
+.lp-worksite-fallback{position:absolute;inset:25% 10% 20%;perspective:600px}
+.lp-fallback-worker{position:absolute;width:70px;height:170px;left:8%;bottom:0;background:linear-gradient(90deg,#315544,#587557);border-radius:25px 25px 13px 13px;border-bottom:65px solid #203d38;box-shadow:10px 12px 20px #001a172e}
+.lp-fallback-worker i{position:absolute;top:-43px;left:13px;width:44px;height:48px;border-radius:18px;background:#c38d63}
+.lp-fallback-worker b{position:absolute;top:-55px;left:7px;width:57px;height:32px;border-radius:28px 28px 4px 4px;background:#e0ac4e}
+.lp-fallback-worker-right{left:auto;right:5%;background:#b99751}.lp-fallback-worker-right b{background:#c2df9a}
+.lp-fallback-rock{position:absolute;bottom:0;left:35%;width:120px;height:105px;border-radius:25px 50px 20px 40px;background:linear-gradient(130deg,#b9c0af,#778573);transform:rotate(-10deg);box-shadow:10px 15px 20px #051d1520}
+.lp-worksite-fallback .lp-fallback-coin{width:75px;height:75px;font-size:38px;line-height:49px;border-width:12px;bottom:150px;right:30%}
+.lp-construction-art:has(canvas) .lp-worksite-fallback{display:none}
+@media(max-width:1100px) and (min-width:761px){.lp-construction-viewport .lp-hero-copy{width:61%;padding-top:85px}.lp-construction-viewport h1{font-size:73px;letter-spacing:-4px}.lp-construction-art{width:61%;right:-8%}.lp-build-payment{right:18%;top:15%;padding:13px 16px}.lp-construction-art .lp-art-caption{display:none}}
+@media(max-width:760px){
+ .lp-construction-chapter{height:260svh}.lp-construction-viewport{min-height:700px}
+ .lp-construction-viewport .lp-hero-copy{width:100%;padding:30px 6% 0}
+ .lp-construction-viewport h1{font-size:clamp(47px,10.5vw,66px);letter-spacing:-3.5px;margin:21px 0 18px}
+ .lp-construction-viewport .lp-eyebrow{font-size:8px;letter-spacing:1.3px}
+ .lp-construction-viewport .lp-hero-copy>p{font-size:14px;line-height:1.65;margin-bottom:21px}
+ .lp-construction-viewport .lp-hero-actions{gap:15px}.lp-construction-viewport .lp-button{font-size:12px!important;min-height:46px;padding:13px 17px;gap:15px}
+ .lp-construction-viewport .lp-watch{font-size:11px!important}.lp-construction-viewport .lp-watch span{width:24px;height:24px}
+ .lp-build-story{margin-top:20px;max-width:315px}.lp-build-status>span{font-size:8px}.lp-build-status>p{font-size:13px;margin:5px 0 12px}.lp-build-timeline{padding-top:7px}.lp-build-timeline>span{font-size:9px}
+ .lp-construction-viewport .lp-hero-note{display:none}
+ .lp-construction-art{height:400px;width:118%;right:-9%;top:auto;bottom:35px}
+ .lp-build-payment{top:3%;right:16%;padding:10px 14px;gap:9px;border-radius:9px}.lp-build-payment strong{font-size:23px;margin-block:2px}.lp-build-payment small{font-size:6px}.lp-build-payment div>span{font-size:8px}.lp-build-check{width:28px;height:28px;font-size:16px}
+ .lp-construction-viewport .lp-hero-bottom{height:45px;font-size:6px;letter-spacing:.8px}.lp-construction-viewport .lp-hero-bottom button{font-size:6px;letter-spacing:.8px}
+}
+@media(max-width:760px) and (max-height:780px){
+ .lp-construction-viewport{min-height:620px}.lp-construction-viewport .lp-hero-copy{padding-top:23px}.lp-construction-viewport h1{font-size:45px;margin:17px 0 13px}
+ .lp-construction-viewport .lp-hero-copy>p{font-size:12px;line-height:1.55;margin-bottom:16px}.lp-construction-viewport .lp-watch{display:none}
+ .lp-build-story{margin-top:17px}.lp-build-status>p{font-size:12px}.lp-build-status>span{font-size:7px}.lp-build-timeline{max-width:285px}
+ .lp-construction-art{height:300px;bottom:25px}.lp-build-payment{top:auto;bottom:30px;right:14%;padding:8px 11px;background:#173c31ed;transform:scale(.85);transform-origin:right bottom}.lp-build-payment strong{font-size:20px}.lp-build-payment small{font-size:5px}.lp-build-payment div>span{font-size:7px}
+}
+@media(prefers-reduced-motion:reduce){.lp-construction-chapter{height:auto}.lp-construction-viewport{position:relative;height:auto;min-height:0}.lp-construction-viewport>.lp-hero{min-height:850px}.lp-build-timeline:before{transform:scaleX(1)}.lp-build-payment{opacity:1}}
+@media(prefers-reduced-motion:reduce) and (max-width:760px){.lp-construction-viewport>.lp-hero{min-height:900px}.lp-construction-art{height:430px;bottom:35px}}

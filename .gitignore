@@ -15,3 +15,5 @@ dist/
 .vercel/
 
 assets/landing-scene.js
+
+assets/construction-scene.js

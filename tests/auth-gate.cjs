@@ -16,7 +16,7 @@ const context=vm.createContext({Intl,Date,URL,URLSearchParams,setTimeout,clearTi
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../app.js'),'utf8'),context);
  await context.window.CLEARBOOK_READY;
  assert.equal(apiRequests,0);
- assert.ok(node('#main').innerHTML.includes('Good business.'));
+ assert.ok(node('#main').innerHTML.includes('Hard work.'));
  assert.ok(node('#main').innerHTML.includes('Illustrative sample'));
  assert.ok(node('#main').innerHTML.includes('lp-scene'));
  assert.ok(node('#main').innerHTML.includes('data-action="sign-in"'));

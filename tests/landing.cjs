@@ -20,8 +20,19 @@ const {chromium}=require('playwright');
   await page.waitForSelector('#lp-scene canvas');
   assert.equal(apiRequests,0,'Landing page must not fetch customer data.');
   await page.screenshot({path:path.join(out,'desktop.png'),fullPage:true});
-  await page.evaluate(()=>window.scrollTo(0,350));
-  await page.waitForFunction(()=>parseFloat(document.querySelector('#clearbook-landing').style.getPropertyValue('--lp-hero-scroll'))>.15);
+  await page.evaluate(()=>window.sceneUnderTest=document.querySelector('#lp-scene canvas'));
+  async function story(progress,phase){
+   await page.evaluate(n=>{const chapter=document.querySelector('.lp-construction-chapter');scrollTo(0,chapter.getBoundingClientRect().top+scrollY+(chapter.offsetHeight-innerHeight)*n);},progress);
+   await page.waitForFunction(expected=>document.querySelector('#clearbook-landing').dataset.workPhase===expected,phase);
+   await page.waitForTimeout(500);
+   assert.equal(await page.evaluate(()=>window.sceneUnderTest===document.querySelector('#lp-scene canvas')),true,'One continuous canvas through every phase.');
+  }
+  await story(.1,'work');const fixedBounds=await page.locator('#lp-scene canvas').boundingBox();
+  await story(.25,'strike');await story(.65,'transform');await story(.98,'recorded');
+  assert.deepEqual(await page.locator('#lp-scene canvas').boundingBox(),fixedBounds,'Camera viewport stays pinned during the story.');
+  assert.equal(await page.locator('.lp-build-payment').evaluate(el=>getComputedStyle(el).opacity),'1');
+  await page.screenshot({path:path.join(out,'recorded.png')});
+  await story(.1,'work');
   const firstObject=page.locator('.lp-workflow-grid .lp-object').first();
   await firstObject.scrollIntoViewIfNeeded();
   const beforeTurn=await firstObject.evaluate(el=>el.closest('article').style.getPropertyValue('--lp-object-turn'));
@@ -40,6 +51,8 @@ const {chromium}=require('playwright');
   await page.waitForFunction(()=>document.querySelector('#lp-access').getBoundingClientRect().top<innerHeight-100);
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.waitForFunction(()=>!document.querySelector('#clearbook-landing').classList.contains('lp-scroll-ready'));
+  await page.waitForFunction(()=>document.querySelector('#clearbook-landing').dataset.workPhase==='recorded');
+  assert.equal(await page.locator('.lp-construction-viewport').evaluate(el=>getComputedStyle(el).position),'relative');
   for(const width of [360,390,768,1920]){
    await page.setViewportSize({width,height:900});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Horizontal overflow at '+width);
@@ -55,6 +68,6 @@ const {chromium}=require('playwright');
   assert.equal(url.searchParams.get('redirect_uri'),'http://127.0.0.1:5178/');
   assert.ok(url.searchParams.get('state'));
   assert.deepEqual(errors,[]);
-  console.log('PASS: real WebGL, scroll-driven depth, mobile layout, product tabs, keyboard navigation, reduced motion, no customer API requests and Cognito PKCE handoff.');
+  console.log('PASS: real WebGL, fixed construction viewport, reversible rock-to-coin story, mobile layout, product tabs, keyboard navigation, reduced motion, no customer API requests and Cognito PKCE handoff.');
  }finally{if(browser)await browser.close();server.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

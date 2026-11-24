@@ -11,7 +11,7 @@ if (!['http:', 'https:'].includes(backend.protocol)) throw new Error('API proxy 
 // Reuse a bounded pool so snapshot refreshes do not overwhelm the local Python server.
 const ProxyAgent=backend.protocol==='https:'?https.Agent:http.Agent;
 const upstreamAgent=new ProxyAgent({keepAlive:true,maxSockets:4});
-const assets = {'/landing.js':['landing.js','text/javascript'],'/landing.css':['landing.css','text/css'],'/assets/landing-scene.js':['assets/landing-scene.js','text/javascript'],'/assets/at-infra-logo-green.png':['assets/at-infra-logo-green.png','image/png'],'/':['index.html','text/html'], '/index.html':['index.html','text/html'],
+const assets = {'/construction.css':['construction.css','text/css'],'/assets/construction-scene.js':['assets/construction-scene.js','text/javascript'],'/landing.js':['landing.js','text/javascript'],'/landing.css':['landing.css','text/css'],'/assets/landing-scene.js':['assets/landing-scene.js','text/javascript'],'/assets/at-infra-logo-green.png':['assets/at-infra-logo-green.png','image/png'],'/':['index.html','text/html'], '/index.html':['index.html','text/html'],
   '/analytics.js':['analytics.js','text/javascript'], '/analytics.css':['analytics.css','text/css'], '/app.js':['app.js','text/javascript'], '/auth.js':['auth.js','text/javascript'], '/provider.js':['provider.js','text/javascript'], '/config.js':['config.js','text/javascript'], '/styles.css':['styles.css','text/css']};
 function error(response, status, message) {
   if (response.headersSent) return response.destroy();
