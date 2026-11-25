@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {updateCoinScenes,clearCoinScenes} from './coin-scenes.js';
 
 // Reparent the actual fragment mesh; the worksite and camera never follow it.
 export function mountCoinJourney({coin,container,camera,world}){
@@ -9,7 +10,7 @@ export function mountCoinJourney({coin,container,camera,world}){
  const resources=[],materials=[],origin=new THREE.Vector3(.5,.57,2.05),top=new THREE.Vector3(.5,1.18,2.05),projected=new THREE.Vector3();
  const clamp=(n,a=0,b=1)=>Math.max(a,Math.min(b,n)),lerp=THREE.MathUtils.lerp;
  const names=['platform','payment','people','records','team','insights','access','finish'];
- const sizes=[180,85,155,82,82,82,205,58];
+ const sizes=[106,55,90,62,62,58,95,40];
  function setup(){
   layer=document.createElement('div');layer.className='lp-coin-journey';layer.setAttribute('aria-hidden','true');
   try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'low-power'});}catch{return false;}
@@ -49,19 +50,22 @@ export function mountCoinJourney({coin,container,camera,world}){
   }
   // Keep the last station reachable even on tall displays with a short footer.
   points.at(-1).scroll=maxScroll;
+  updateCoinScenes(page,points,scrollY,innerHeight);
   let index=0;while(index<points.length-2&&scrollY>points[index+1].scroll)index++;
   const a=points[index],b=points[index+1],t=clamp((scrollY-a.scroll)/Math.max(1,b.scroll-a.scroll));
   const sweep=Math.sin(t*Math.PI),direction=index%2?1:-1;
   const cardNames=['records','team','insights'],rail=cardNames.includes(a.name)&&cardNames.includes(b.name)?70:innerWidth-45;
-  const size=lerp(a.size,b.size,t)*(small?1-sweep*.38:1);
+  // The coin tucks into its edge during flight, then presses into each scene.
+  const landing=Math.sin(clamp((t-.72)/.28)*Math.PI);
+  const size=lerp(a.size,b.size,t)*(small?1-sweep*.38:1)*(1-landing*.12);
   const pathX=lerp(a.x,b.x,t)+sweep*direction*(small?12:65);
   const x=clamp(small?lerp(pathX,rail,sweep*.8):pathX,size*.6,innerWidth-size*.6);
-  const y=clamp(lerp(a.y,b.y,t)-sweep*(small?12:35),size*.6+12,innerHeight-size*.6-15);
+  const y=clamp(lerp(a.y,b.y,t)-sweep*(small?28:75)+landing*12,size*.6+12,innerHeight-size*.6-15);
   if(!active){scene.add(coin);active=true;}
   coin.position.set(x-innerWidth/2,innerHeight/2-y,0);coin.scale.setScalar(size/1.22);
   const turn=scrollY*.004,rotation=new THREE.Quaternion().setFromEuler(new THREE.Euler(.12+Math.sin(turn*.6)*.12,.2+Math.sin(turn)*.42+sweep*Math.PI*2,.08*Math.sin(turn*.7)));
   coin.quaternion.copy(index===0?initialQ.clone().slerp(rotation,t):rotation);
-  halo.position.set(coin.position.x,coin.position.y,-20);halo.scale.setScalar(size*(.67+sweep*.12));halo.rotation.set(.25,Math.sin(turn*.4)*.6,turn*.2);halo.material.opacity=.12+sweep*.2;
+  halo.position.set(coin.position.x,coin.position.y,-20);halo.scale.setScalar(size*(.67+landing*.8));halo.rotation.set(.25,Math.sin(turn*.4)*.6,turn*.2);halo.material.opacity=.12+landing*.4;
   shadow.position.set(coin.position.x,coin.position.y-size*.66,-30);shadow.scale.set(size*1.65,size*.35,1);
   stars.forEach((star,i)=>{const d=(i+1)*6;star.position.set(coin.position.x+Math.sin(turn+i*.65)*d,coin.position.y+d+size*.25,5);star.scale.setScalar((small?1:1.6)*(1-i*.06));star.rotation.z=turn;star.material.opacity=sweep*(1-i/10)*.6;});
   const station=t<.5?a.name:b.name;
@@ -71,5 +75,5 @@ export function mountCoinJourney({coin,container,camera,world}){
   renderer.render(scene,view);
  }
  window.addEventListener('resize',resize,{passive:true});
- return {update,destroy(){disposed=true;restore();window.removeEventListener('resize',resize);renderer?.dispose();renderer?.forceContextLoss();layer?.remove();for(const resource of resources)resource.dispose();for(const material of materials)material.dispose();}};
+ return {update,destroy(){disposed=true;restore();clearCoinScenes(page);window.removeEventListener('resize',resize);renderer?.dispose();renderer?.forceContextLoss();layer?.remove();for(const resource of resources)resource.dispose();for(const material of materials)material.dispose();}};
 }
