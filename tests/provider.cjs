@@ -43,7 +43,7 @@ function setup(role = 'provider') {
       else if(endpoint==='/provider/customers/customer-a'&&options.method==='DELETE'){
         customers.splice(customers.findIndex(c=>c.id==='customer-a'),1);data={deleted:true};
       }
-      else if(role==='customer'&&endpoint==='/dashboard')data={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};
+      else if(role==='customer'&&endpoint.startsWith('/dashboard?'))data={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};
       else if(role==='customer'&&endpoint==='/categories')data={items:[{name:'Fuel'}]};
       else if(role==='customer')data={items:[],total:0};
       else throw new Error('Provider must never request ledger endpoint: '+endpoint);
@@ -99,6 +99,14 @@ function setup(role = 'provider') {
   assert.ok(customer.node('#main').innerHTML.includes('Total debits'));
   assert.ok(customer.node('.workspace').innerHTML.includes('Organization A'));
   assert.ok(customer.requests.every(request=>!request.endpoint.startsWith('/provider/')));
+  // Losing membership on a later refresh must also hide previously loaded data.
+  customer.context.fetch=async()=>({status:403,ok:false,json:async()=>({error:'Membership disabled.'})});
+  await customer.run('refreshData()');
+  assert.equal(customer.run('connected'),false);
+  assert.equal(customer.run('workspaceSession'),null);
+  assert.equal(customer.run('dataCache.size'),0);
+  assert.ok(customer.node('#main').innerHTML.includes('Membership disabled.'));
+  assert.ok(!customer.node('#main').innerHTML.includes('Total debits'));
 
   const unassigned=setup('unassigned');await unassigned.context.window.CLEARBOOK_READY;
   assert.equal(unassigned.requests.length,1);

@@ -71,60 +71,136 @@ async function api(path, {method='GET', body, key}={}) {
   if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
   return data;
 }
-function refreshData(notify=false) {
-  if (loading) return pendingLoad;
-  pendingLoad = loadSnapshot(notify);
+// Cache only resources actually visited; never carry them across workspace sessions.
+const dataCache = new Map();
+let loadGeneration = 0, cacheWorkspace = null;
+let transactionTotal = 0, transactionRows = [], analyticsRows = [];
+let searchTimer;
+function cachedResource(path) {
+  if (!dataCache.has(path)) {
+    const request=api(path);
+    dataCache.set(path,request);
+    request.catch(()=>{if(dataCache.get(path)===request)dataCache.delete(path);});
+  }
+  return dataCache.get(path);
+}
+function invalidateData(kind='all') {
+  for(const key of dataCache.keys()) {
+    if(kind==='all'||key.startsWith('/transactions?')||key.startsWith('/dashboard?')||key===`/${kind}`)dataCache.delete(key);
+  }
+}
+function transactionQuery({all=false}={}) {
+  const selected={};
+  for(const key of ['payer','client','vendor','category','location'])if(filterValues(key).length)selected[key]=filterValues(key);
+  const query=new URLSearchParams({limit:String(all?200:page==='overview'?5:10),page:String(all?1:pageNumber),tab,q:search});
+  if(Object.keys(selected).length)query.set('filters',JSON.stringify(selected));
+  if(filters.from)query.set('from',filters.from);
+  if(filters.to)query.set('to',filters.to);
+  if(page==='overview'){
+    const end=new Date(Date.UTC(Number(overviewMonth.slice(0,4)),Number(overviewMonth.slice(5,7)),0)).toISOString().slice(0,10);
+    query.set('from',filters.from && filters.from>overviewMonth+'-01'?filters.from:overviewMonth+'-01');
+    query.set('to',filters.to && filters.to<end?filters.to:end);
+  }
+  return query;
+}
+async function allTransactionPages(query=new URLSearchParams({limit:'200',page:'1'}), read=api) {
+  const rows=[];
+  for(let number=1;;number++){
+    query.set('page',String(number));
+    const result=await read('/transactions?'+query);
+    rows.push(...result.items);
+    if(rows.length>=result.total||!result.items.length)return rows;
+  }
+}
+function refreshData(notify=false, invalidate=true) {
+  clearTimeout(searchTimer);
+  if(invalidate)invalidateData(typeof invalidate==='string'?invalidate:'all');
+  pendingLoad=loadSnapshot(notify);
   return pendingLoad;
 }
 async function loadSnapshot(notify=false) {
   if(window.ClearbookAuth?.enabled&&!window.ClearbookAuth.isSignedIn()){render();return false;}
-  if(window.ClearbookAuth?.enabled)workspaceSession=null;
-  loading=true; loadError=''; render();
+  const generation=++loadGeneration;
+  const current=()=>generation===loadGeneration&&(!window.ClearbookAuth?.enabled||window.ClearbookAuth.isSignedIn());
+  const requestedPage=page;
+  loading=true; loadError=''; transactionRows=[]; transactionTotal=0; render();
   try {
     if(window.ClearbookAuth?.enabled){
-      const session = await api('/session');
-      if(!window.ClearbookAuth.isSignedIn())return false;
+      let session;
+      try{session=await api('/session');}
+      catch(error){if(current()){workspaceSession=null;connected=false;cacheWorkspace=null;dataCache.clear();analyticsRows=[];db={accounts:[],vendors:[],clients:[],transactions:[]};summary={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};}throw error;}
+      if(!current())return false;
       if(!['provider','customer'].includes(session.role)||!session.name||(session.role==='customer'&&(!session.workspace?.id||!session.workspace?.name)))throw new Error('This account has no workspace access.');
-      workspaceSession = session;
+      workspaceSession=session;
       if(isProvider()){
-        const [customers, users] = await Promise.all([api('/provider/customers'), api('/provider/users')]);
-        if(!window.ClearbookAuth.isSignedIn())return false;
-        providerData = {customers:customers.items, users:users.items};
-        connected=true; lastRefreshed=new Date();
-        if(notify)toast('Organization access refreshed.');
-        return true;
+        const [customers,users]=await Promise.all([api('/provider/customers'),api('/provider/users')]);
+        if(!current())return false;
+        providerData={customers:customers.items,users:users.items};
+        connected=true;lastRefreshed=new Date();return true;
       }
     }
-    const requestedWorkspaceId = workspaceSession?.workspace?.id || null;
-    const [accounts,vendors,clients,categoryData,locationData,dashboardData,first] = await Promise.all([
-      api('/accounts'),api('/vendors'),api('/clients'),api('/categories'),api('/locations'),api('/dashboard'),api('/transactions?limit=200&page=1'),
+    const workspaceId=workspaceSession?.workspace?.id||'local';
+    if(cacheWorkspace!==workspaceId){dataCache.clear();analyticsRows=[];summary={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};connected=false;snapshotWorkspaceId=null;db={accounts:[],vendors:[],clients:[],transactions:[]};cacheWorkspace=workspaceId;}
+    const refs=['accounts'];
+    if(['overview','transactions','analytics','vendors','staff','subcontractors'].includes(requestedPage))refs.push('vendors');
+    if(['overview','transactions','analytics','clients'].includes(requestedPage))refs.push('clients');
+    if(showFilters||requestedPage==='analytics')refs.push('categories','locations');
+    const ledger=['overview','transactions'].includes(requestedPage);
+    const query=ledger?transactionQuery():null;
+    const [references,dashboardData,result,reportRows]=await Promise.all([
+      Promise.all(refs.map(async name=>[name,await cachedResource('/'+name)])),
+      cachedResource('/dashboard?month='+overviewMonth),
+      ledger?cachedResource('/transactions?'+query):null,
+      requestedPage==='analytics'?allTransactionPages(undefined,path=>{
+        if(!current())throw new Error('Report loading cancelled.');
+        return cachedResource(path);
+      }):null,
     ]);
-    const transactions=[...first.items];
-    // Fetch subsequent pages once per explicit refresh; this is pagination, not polling.
-    for(let page=2;transactions.length<first.total;page++) {
-      const next=await api(`/transactions?limit=200&page=${page}`);
-      transactions.push(...next.items);
-      if(!next.items.length) break;
+    if(!current())return false;
+    for(const [name,value] of references){
+      if(name==='categories')categories.splice(0,categories.length,...value.items.map(c=>c.name));
+      else if(name==='locations')locations.splice(0,locations.length,...value.items.map(l=>l.name));
+      else db[name]=value.items;
     }
-    if(window.ClearbookAuth?.enabled&&!window.ClearbookAuth.isSignedIn())return false;
-    if(window.ClearbookAuth?.enabled && workspaceSession?.workspace?.id!==requestedWorkspaceId)return false;
-    db={accounts:accounts.items,vendors:vendors.items,clients:clients.items,transactions};
-    snapshotWorkspaceId=requestedWorkspaceId;
-    categories.splice(0,categories.length,...categoryData.items.map(c=>c.name));
-    locations.splice(0,locations.length,...locationData.items.map(l=>l.name));
-    summary=dashboardData; connected=true; lastRefreshed=new Date();
-    if(notify) toast('Latest data loaded.');
+    summary=dashboardData;
+    if(result){transactionRows=result.items;transactionTotal=result.total;}
+    if(reportRows)analyticsRows=reportRows;
+    db.transactions=reportRows||transactionRows;
+    snapshotWorkspaceId=workspaceSession?.workspace?.id||null;
+    connected=true;lastRefreshed=new Date();
+    if(result&&pageNumber>Math.max(1,Math.ceil(result.total/(page==='overview'?5:10)))){
+      pageNumber=Math.max(1,Math.ceil(result.total/(page==='overview'?5:10)));
+      return await refreshData(false,false);
+    }
+    if(notify)toast('Latest data loaded.');
     return true;
-  } catch(error) {
-    loadError=error.message; if(notify)toast(error.message); return false;
-  } finally { loading=false;render(); }
+  }catch(error){if(current()){loadError=error.message;if(notify)toast(error.message);}return false;}
+  finally{if(generation===loadGeneration){loading=false;render();}}
+}
+async function prepareForm() {
+  const generation=loadGeneration;
+  const values=await Promise.all(['accounts','vendors','clients','categories','locations'].map(async name=>[name,await cachedResource('/'+name)]));
+  if(generation!==loadGeneration||window.ClearbookAuth?.enabled&&!window.ClearbookAuth.isSignedIn())return false;
+  for(const [name,value] of values){
+    if(name==='categories')categories.splice(0,categories.length,...value.items.map(c=>c.name));
+    else if(name==='locations')locations.splice(0,locations.length,...value.items.map(l=>l.name));
+    else db[name]=value.items;
+  }
+  return true;
+}
+function reloadTransactions(delay=0){
+  clearTimeout(searchTimer);
+  // Invalidate pending responses immediately, including during the search debounce.
+  ++loadGeneration;loading=false;transactionRows=[];transactionTotal=0;
+  if(delay)searchTimer=setTimeout(()=>refreshData(false,false),delay);
+  else return refreshData(false,false);
 }
 let page='overview', tab='all', search='', pageNumber=1, showFilters=false;
 let overviewMonth=isoToday().slice(0,7);
-const overviewTransactions=()=>db.transactions.filter(t=>t.date.startsWith(overviewMonth));
+const overviewTransactions=()=>transactionRows;
 const overviewMonthLabel=()=>salaryMonthLabel(overviewMonth);
 function overviewControls(){return `<div class="filters filter-fields"><label>Month <input aria-label="Overview month" type="month" data-overview-month value="${esc(overviewMonth)}"></label><span class="panel-subtitle">Showing ${esc(overviewMonthLabel())}</span></div>`;}
-function overviewTotals(){const rows=overviewTransactions();return {expenses:sum(rows.filter(t=>t.type==='EXPENSE')),fronted:sum(rows.filter(t=>t.type==='EXPENSE'&&isExternal(t))),settled:sum(rows.filter(t=>t.type==='PAYBACK')),credits:sum(rows.filter(t=>t.type==='CREDIT')),outstanding:summary.totals.outstanding};}
+function overviewTotals(){return summary.overview?.totals||{expenses:0,fronted:0,settled:0,credits:0,outstanding:summary.totals.outstanding};}
 let filters={payer:'',vendor:'',category:'',from:'',to:''};
 let openFilterGroups=new Set();
 const filterValues=key=>Array.isArray(filters[key])?filters[key]:filters[key]?[filters[key]]:[];
@@ -140,7 +216,7 @@ function transactionFilterControls(){
 
 let formType='EXPENSE', editId=null, draft={};
 const analytics = window.ClearbookAnalytics?.create();
-function analyticsPage(){return analytics ? analytics.render({data:db,categories,locations,workspaceId:workspaceSession?.workspace?.id||'local',today:isoToday(),loading,repaint:render,notify:toast}) : ''; }
+function analyticsPage(){return analytics ? analytics.render({data:{...db,transactions:analyticsRows},categories,locations,workspaceId:workspaceSession?.workspace?.id||'local',today:isoToday(),loading,repaint:render,notify:toast}) : ''; }
 const main=document.querySelector('#main');
 const dialog=document.querySelector('#transaction-dialog');
 const detailDialog=document.querySelector('#detail-dialog');
@@ -160,8 +236,8 @@ const button=(label,action,ico='',style='')=>`<button class="button ${style}" da
 function navigation(){document.querySelector('#navigation').innerHTML=[['overview','Overview'],['analytics','Analytics'],['transactions','Transactions'],['creditors','Paybacks'],['clients','Clients'],['vendors','Vendors'],['subcontractors','Subcontractors'],['staff','Staff'],['accounts','Accounts']].map(([key,label])=>`<a href="#${key}" class="${page===key?'active':''}" ${page===key?'aria-current="page"':''} title="${label}">${icon(key)}<span class="nav-text">${label}</span>${key==='creditors'?`<span class="nav-count">${activeCreditors().length}</span>`:''}</a>`).join('');document.querySelector('#breadcrumb-current').textContent=({creditors:'Paybacks'}[page]||page[0].toUpperCase()+page.slice(1));}
 function heading(title,description,eyebrow='YOUR BUSINESS, AT A GLANCE'){return `<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p class="page-description">${description}</p></div><div class="heading-actions"><button class="button" data-action="refresh" ${loading?'disabled':''}>${icon('refresh')}${loading?'Refreshing...':'Refresh'}</button>${button('Export','export','download')}${button('Add transaction','add','plus','primary')}</div></div>`;}
 function metrics(creditorView=false){const n=creditorView?summary.totals:overviewTotals();const items=creditorView?[['Total capital fronted',n.fronted,'creditors','Across all external funding accounts'],['Total repaid',n.settled,'check','Reimbursed to your creditors'],['Outstanding payback',n.outstanding,'transactions','Your current reimbursement liability'],['Active creditors',activeCreditors().length,'vendors','With an outstanding balance']]:[['Total debits',n.expenses,'trend','Across all accounts & vendors'],['Externally funded',n.fronted,'creditors','Paid on behalf of your business'],['Total repaid',n.settled,'check','Returned to external creditors'],['Outstanding payback',n.outstanding,'transactions','Current balance · all time']];if(!creditorView)items.push(['Client credits',n.credits||0,'plus','Money received from clients']);return `<div class="metrics">${items.map(([label,value,ico,foot],i)=>`<div class="metric ${i===(creditorView?2:3)?'highlight':''}"><div class="metric-label">${label}<span class="metric-icon">${icon(ico)}</span></div><div class="metric-value">${creditorView&&i===3?value:money(value)}</div><div class="metric-foot">${i===0?'<strong>↗</strong>':''}${foot}</div></div>`).join('')}</div>`;}
-function charts(){const rows=overviewTransactions();const days=new Date(Number(overviewMonth.slice(0,4)),Number(overviewMonth.slice(5,7)),0).getDate();const weeks=Array.from({length:Math.ceil(days/7)},(_,i)=>({from:i*7+1,to:Math.min((i+1)*7,days)}));const labels=weeks.map(w=>`${w.from}–${w.to}`);const monthly=weeks.map(w=>{const weekRows=rows.filter(t=>{const day=Number(t.date.slice(8,10));return day>=w.from&&day<=w.to;});return {expenses:sum(weekRows.filter(t=>t.type==='EXPENSE')),repaid:sum(weekRows.filter(t=>t.type==='PAYBACK'))};});const max=Math.max(50000,...monthly.flatMap(m=>[m.expenses,m.repaid]));const scale=Math.ceil(max/50000)*50000;const spending=categories.map((name,i)=>({name,color:categoryColors[i%categoryColors.length],value:sum(rows.filter(t=>t.type==='EXPENSE'&&t.category===name))}));const total=spending.reduce((n,s)=>n+s.value,0);let position=0;const gradient=spending.map(s=>{const start=position;position+=total?s.value/total*100:0;return `${s.color} ${start}% ${position}%`;}).join(',');return `<div class="overview-grid"><section class="panel"><div class="panel-heading"><div><h2>Money in motion</h2><p class="panel-subtitle">Weekly debits and repayments · ${esc(overviewMonthLabel())}</p></div><div class="chart-legend"><span><i class="legend-dot"></i>Debits</span><span><i class="legend-dot light"></i>Repayments</span></div></div><div class="chart" role="img" aria-label="Weekly debits and repayments for ${esc(overviewMonthLabel())}"><div class="chart-scale">${[scale,scale*2/3,scale/3,0].map(v=>`<span>${v===0?'₹0':`₹${Math.round(v/1000)}k`}</span>`).join('')}</div><div class="chart-plot">${monthly.map((m,i)=>`<div class="bar-group" title="${labels[i]} ${esc(overviewMonthLabel())}: debits ${money(m.expenses)}, repayments ${money(m.repaid)}"><div class="bar" style="height:${m.expenses/scale*100}%"></div><div class="bar light" style="height:${m.repaid/scale*100}%"></div><span>${labels[i]}</span></div>`).join('')}</div></div><div class="chart-bottom"><span>${esc(overviewMonthLabel())}</span><strong>Every payment, accounted for ${icon('arrow')}</strong></div></section><section class="panel"><div class="panel-heading"><div><h2>Where your money goes</h2><p class="panel-subtitle">Debit breakdown by category · ${esc(overviewMonthLabel())}</p></div></div><div class="spending-content"><div class="donut" style="background:conic-gradient(${total?gradient:'#e7ebe5'})" role="img" aria-label="Debit distribution by category"><div class="donut-center"><small>Total debits</small><strong>${money(total)}</strong></div></div><div class="category-legend">${spending.map(s=>`<div class="category-row"><i style="background:${s.color}"></i><span>${esc(s.name)}</span><strong>${total?Math.round(s.value/total*100):0}%</strong></div>`).join('')}</div></div><div class="chart-bottom"><span>${categories.length} debit categories</span><strong>Built from your transactions</strong></div></section></div>`;}
-function filteredTransactions(){return (page==='overview'?overviewTransactions():db.transactions).filter(t=>{const status=reimbursement(t)[0];if(tab==='internal'&&!(t.type==='EXPENSE'&&!isExternal(t)))return false;if(tab==='external'&&!(t.type==='EXPENSE'&&isExternal(t)))return false;if(tab==='pending'&&!['pending','partial'].includes(status))return false;if(tab==='paybacks'&&t.type!=='PAYBACK')return false;if(tab==='credits'&&t.type!=='CREDIT')return false;if(!matchesFilter('client',t.client_id))return false;if(!matchesFilter('payer',t.payer,t.recipient))return false;if(!matchesFilter('vendor',t.vendor,...(t.payee_name?['name:'+t.payee_name.trim().toLowerCase()]:[])))return false;if(!matchesFilter('category',t.category))return false;if(!matchesFilter('location',t.location))return false;if(filters.from&&t.date<filters.from)return false;if(filters.to&&t.date>filters.to)return false;const recipient=payeeName(t)||account(t.recipient)?.name;return `${client(t.client_id)?.name||account(t.payer)?.name} ${recipient} ${t.location||''} ${t.category||''} ${t.mode} ${t.amount}`.toLowerCase().includes(search.toLowerCase());}).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));}
+function charts(){const rows=overviewTransactions();const days=new Date(Number(overviewMonth.slice(0,4)),Number(overviewMonth.slice(5,7)),0).getDate();const weeks=Array.from({length:Math.ceil(days/7)},(_,i)=>({from:i*7+1,to:Math.min((i+1)*7,days)}));const labels=weeks.map(w=>`${w.from}–${w.to}`);const monthly=weeks.map((_,i)=>summary.overview?.weeks[i]||{expenses:0,repaid:0});const max=Math.max(50000,...monthly.flatMap(m=>[m.expenses,m.repaid]));const scale=Math.ceil(max/50000)*50000;const spending=Object.entries(summary.overview?.spending||{}).map(([name,value],i)=>({name,value,color:categoryColors[i%categoryColors.length]}));const total=spending.reduce((n,s)=>n+s.value,0);let position=0;const gradient=spending.map(s=>{const start=position;position+=total?s.value/total*100:0;return `${s.color} ${start}% ${position}%`;}).join(',');return `<div class="overview-grid"><section class="panel"><div class="panel-heading"><div><h2>Money in motion</h2><p class="panel-subtitle">Weekly debits and repayments · ${esc(overviewMonthLabel())}</p></div><div class="chart-legend"><span><i class="legend-dot"></i>Debits</span><span><i class="legend-dot light"></i>Repayments</span></div></div><div class="chart" role="img" aria-label="Weekly debits and repayments for ${esc(overviewMonthLabel())}"><div class="chart-scale">${[scale,scale*2/3,scale/3,0].map(v=>`<span>${v===0?'₹0':`₹${Math.round(v/1000)}k`}</span>`).join('')}</div><div class="chart-plot">${monthly.map((m,i)=>`<div class="bar-group" title="${labels[i]} ${esc(overviewMonthLabel())}: debits ${money(m.expenses)}, repayments ${money(m.repaid)}"><div class="bar" style="height:${m.expenses/scale*100}%"></div><div class="bar light" style="height:${m.repaid/scale*100}%"></div><span>${labels[i]}</span></div>`).join('')}</div></div><div class="chart-bottom"><span>${esc(overviewMonthLabel())}</span><strong>Every payment, accounted for ${icon('arrow')}</strong></div></section><section class="panel"><div class="panel-heading"><div><h2>Where your money goes</h2><p class="panel-subtitle">Debit breakdown by category · ${esc(overviewMonthLabel())}</p></div></div><div class="spending-content"><div class="donut" style="background:conic-gradient(${total?gradient:'#e7ebe5'})" role="img" aria-label="Debit distribution by category"><div class="donut-center"><small>Total debits</small><strong>${money(total)}</strong></div></div><div class="category-legend">${spending.map(s=>`<div class="category-row"><i style="background:${s.color}"></i><span>${esc(s.name)}</span><strong>${total?Math.round(s.value/total*100):0}%</strong></div>`).join('')}</div></div><div class="chart-bottom"><span>${spending.length} debit categories</span><strong>Built from your transactions</strong></div></section></div>`;}
+function filteredTransactions(){return transactionRows;}
 let searchSuggestionIndex=-1;
 function searchNames(){return [...new Set([...db.vendors,...db.clients,...db.accounts].map(item=>item.name))].filter(name=>name.toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>a.localeCompare(b));}
 function searchField(){return `<div class="transaction-search"><label class="search">${icon('search')}<input id="search" type="search" placeholder="Search transactions..." aria-label="Search transactions" value="${esc(search)}" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="search-suggestions" aria-expanded="false" autocomplete="off"></label><div id="search-suggestions" class="search-suggestions" role="listbox" aria-label="Name suggestions" hidden></div></div>`;}
@@ -179,17 +255,17 @@ function showSearchSuggestions(){
  list.innerHTML=names.length?names.map((name,i)=>`<button type="button" role="option" aria-selected="false" id="search-name-${i}" tabindex="-1" data-search-name="${esc(name)}">${esc(name)}</button>`).join(''):'<p class="search-no-match">No matching names</p>';
  list.hidden=false;input.setAttribute('aria-expanded','true');input.removeAttribute('aria-activedescendant');
 }
-function selectSearchName(name){search=name;pageNumber=1;render();document.querySelector('#search').focus();closeSearchSuggestions();}
-function table(){const list=filteredTransactions(),size=page==='overview'?5:10;const pages=Math.max(1,Math.ceil(list.length/size));pageNumber=Math.min(pageNumber,pages);const rows=list.slice((pageNumber-1)*size,pageNumber*size);return `<section class="panel transaction-panel"><div class="table-toolbar"><div class="table-title"><h2>${page==='overview'?'Recent transactions':'All transactions'}</h2><span class="count-pill">${list.length}</span></div><div class="toolbar-actions">${searchField()}${button('Filters','filters','filter')}</div></div><div class="filters">${[['all','All transactions'],['internal','Business funded'],['external','Externally funded'],['pending','Pending payback'],['paybacks','Repayments'],['credits','Credits received']].map(([id,name])=>`<button class="chip ${tab===id?'active':''}" data-tab="${id}" aria-pressed="${tab===id}">${name}</button>`).join('')}</div>${showFilters?transactionFilterControls():''}<div class="table-scroll"><table><thead><tr><th>DATE</th><th>TYPE</th><th>FROM</th><th>TO</th><th>CATEGORY</th><th>LOCATION</th><th>MODE</th><th style="text-align:right">AMOUNT</th><th>STATUS</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows.map(t=>{const [status,label]=reimbursement(t);return `<tr class="transaction-row" data-detail="${esc(t.id)}" tabindex="0" aria-haspopup="dialog" aria-label="View transaction dated ${esc(dateLabel(t.date))}"><td>${dateLabel(t.date)}</td><td>${esc(t.type==='CREDIT'?'Credit':t.type==='PAYBACK'?'Payback':t.type==='TRANSFER'?'Transfer':'Debit')}</td><td>${esc(t.type==='CREDIT'?client(t.client_id)?.name:account(t.payer)?.name)}</td><td>${esc(payeeName(t)||account(t.recipient)?.name||'—')}</td><td>${esc(t.category||(t.type==='PAYBACK'?'Payback / Settlement':t.type==='CREDIT'?'Client receipt':'Account transfer'))}</td><td>${esc(t.location)}</td><td>${esc(t.mode==='CASH'?'Cash':t.mode)}</td><td class="amount">${money(t.amount)}</td><td><span class="status ${status}">${label}</span></td><td><button class="row-action" data-detail="${t.id}" aria-label="View transaction dated ${esc(dateLabel(t.date))}">${icon('more')}</button></td></tr>`;}).join('')}</tbody></table>${!rows.length?'<div class="empty">No transactions match your filters. Try a different search.</div>':''}</div><div class="table-footer"><span>${list.length?`Showing ${(pageNumber-1)*size+1}–${Math.min(pageNumber*size,list.length)} of ${list.length} transactions`:'0 transactions'}</span><div class="pagination"><button data-pagination="${pageNumber-1}" ${pageNumber===1?'disabled':''} aria-label="Previous page">‹</button>${Array.from({length:pages},(_,i)=>`<button data-pagination="${i+1}" class="${pageNumber===i+1?'active':''}" aria-label="Page ${i+1}" ${pageNumber===i+1?'aria-current="page"':''}>${i+1}</button>`).join('')}<button data-pagination="${pageNumber+1}" ${pageNumber===pages?'disabled':''} aria-label="Next page">›</button></div></div></section>`;}
+function selectSearchName(name){search=name;pageNumber=1;reloadTransactions();render();document.querySelector('#search').focus();closeSearchSuggestions();}
+function table(){const list=filteredTransactions(),size=page==='overview'?5:10;const total=transactionTotal,pages=Math.max(1,Math.ceil(total/size));const rows=list;const pageButtons=[...new Set([1,...Array.from({length:5},(_,i)=>pageNumber-2+i).filter(n=>n>=1&&n<=pages),pages])].sort((a,b)=>a-b);return `<section class="panel transaction-panel"><div class="table-toolbar"><div class="table-title"><h2>${page==='overview'?'Recent transactions':'All transactions'}</h2><span class="count-pill">${total}</span></div><div class="toolbar-actions">${searchField()}${button('Filters','filters','filter')}</div></div><div class="filters">${[['all','All transactions'],['internal','Business funded'],['external','Externally funded'],['pending','Pending payback'],['paybacks','Repayments'],['credits','Credits received']].map(([id,name])=>`<button class="chip ${tab===id?'active':''}" data-tab="${id}" aria-pressed="${tab===id}">${name}</button>`).join('')}</div>${showFilters?transactionFilterControls():''}<div class="table-scroll"><table><thead><tr><th>DATE</th><th>TYPE</th><th>FROM</th><th>TO</th><th>CATEGORY</th><th>LOCATION</th><th>MODE</th><th style="text-align:right">AMOUNT</th><th>STATUS</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows.map(t=>{const [status,label]=reimbursement(t);return `<tr class="transaction-row" data-detail="${esc(t.id)}" tabindex="0" aria-haspopup="dialog" aria-label="View transaction dated ${esc(dateLabel(t.date))}"><td>${dateLabel(t.date)}</td><td>${esc(t.type==='CREDIT'?'Credit':t.type==='PAYBACK'?'Payback':t.type==='TRANSFER'?'Transfer':'Debit')}</td><td>${esc(t.type==='CREDIT'?client(t.client_id)?.name:account(t.payer)?.name)}</td><td>${esc(payeeName(t)||account(t.recipient)?.name||'—')}</td><td>${esc(t.category||(t.type==='PAYBACK'?'Payback / Settlement':t.type==='CREDIT'?'Client receipt':'Account transfer'))}</td><td>${esc(t.location)}</td><td>${esc(t.mode==='CASH'?'Cash':t.mode)}</td><td class="amount">${money(t.amount)}</td><td><span class="status ${status}">${label}</span></td><td><button class="row-action" data-detail="${t.id}" aria-label="View transaction dated ${esc(dateLabel(t.date))}">${icon('more')}</button></td></tr>`;}).join('')}</tbody></table>${!rows.length?loading?'<div class="empty" role="status">Loading transactions...</div>':loadError?'<div class="empty">Unable to load transactions. Use Refresh to retry.</div>':'<div class="empty">No transactions match your filters. Try a different search.</div>':''}</div><div class="table-footer"><span>${total?`Showing ${(pageNumber-1)*size+1}–${Math.min(pageNumber*size,total)} of ${total} transactions`:'0 transactions'}</span><div class="pagination"><button data-pagination="${pageNumber-1}" ${pageNumber===1?'disabled':''} aria-label="Previous page">‹</button>${pageButtons.map(n=>`<button data-pagination="${n}" class="${pageNumber===n?'active':''}" aria-label="Page ${n}" ${pageNumber===n?'aria-current="page"':''}>${n}</button>`).join('')}<button data-pagination="${pageNumber+1}" ${pageNumber===pages?'disabled':''} aria-label="Next page">›</button></div></div></section>`;}
 function creditorStrip(){return `<section class="panel creditor-strip"><div class="panel-heading"><div><h2>A quick look at paybacks</h2><p class="panel-subtitle">A little help, clearly accounted for.</p></div><a class="button text" href="#creditors">View all paybacks ${icon('arrow')}</a></div><div class="creditor-mini-grid">${externalAccounts().slice(0,3).map((a,i)=>`<div class="creditor-mini"><span class="initials ${['','sage','lilac'][i]}">${esc(initials(a.owner))}</span><div><strong>${esc(a.owner)}</strong><small>${esc(a.name)}</small></div><div class="balance"><strong>${money(creditorStats(a.id).balance)}</strong><button data-repay="${a.id}">Record payback ↗</button></div></div>`).join('')}</div></section>`;}
 function creditors(){return `${heading('Good accounts. Clear relationships.','See who has your back, and what you owe them.','PAYBACKS & REIMBURSEMENTS')}${metrics(true)}<div class="creditor-cards">${externalAccounts().map((a,i)=>{const s=creditorStats(a.id);return `<section class="panel creditor-card"><div class="person"><span class="initials ${['','sage','lilac'][i%3]}">${esc(initials(a.owner))}</span><div><h2>${esc(a.owner)}</h2><small>${esc(a.name)}</small></div></div><div class="detail-line"><span>Total funded</span><strong>${money(s.fronted)}</strong></div><div class="detail-line"><span>Total reimbursed</span><strong>${money(s.settled)}</strong></div><div class="owed-line"><span>Outstanding balance</span><strong>${money(s.balance)}</strong></div><button class="button ${s.balance>0?'primary':''}" data-repay="${a.id}" ${s.balance<=0?'disabled':''}>${icon('transactions')} ${s.balance>0?'Record payback':'All settled'}</button></section>`;}).join('')}</div><p class="section-note">${icon('creditors')} Repayments reduce what you owe. They don’t count as a second debit. Partial reimbursements are allocated to the oldest debits first by the server.</p>`;}
 function directory(){
  const isAccounts=page==='accounts',staff=page==='staff',subcontractors=page==='subcontractors';
  const records=isAccounts?db.accounts:db.vendors.filter(v=>payeeRoles(v).includes(staff?'STAFF':subcontractors?'SUBCONTRACTOR':'SUPPLIER'));
  return `${heading(isAccounts?'Every account. One picture.':staff?'Your team. Every salary.':subcontractors?'Your subcontractors. Every payment.':'The people behind your progress.',isAccounts?'Business funds and personal support, organized in one place.':staff?'Keep staff details and salary payments together.':subcontractors?'Subcontractors, with a complete payment history.':'Suppliers, with a complete payment history.',isAccounts?'FUNDING ACCOUNTS':staff?'YOUR STAFF':subcontractors?'YOUR SUBCONTRACTOR DIRECTORY':'YOUR VENDOR DIRECTORY')}<div style="margin-bottom:22px">${button(isAccounts?'Add account':staff?'Add staff':subcontractors?'Add subcontractor':'Add vendor',isAccounts?'new-account':staff?'new-staff':subcontractors?'new-subcontractor':'new-vendor','plus')}</div><div class="directory-grid">${records.map((item,i)=>{
- const transactions=db.transactions.filter(t=>t.type==='EXPENSE'&&(isAccounts?t.payer===item.id:t.vendor===item.id)&&(!staff||t.category===SALARY_CATEGORY));
- const active=transactions.filter(t=>!t.reversed_at&&t.status?.[0]!=='reversed');
- return `<section class="panel directory-card"><span class="initials ${['','sage','lilac','blue'][i%4]}">${isAccounts?icon('accounts'):esc(initials(item.name))}</span><h2>${esc(item.name)}</h2><p>${esc(isAccounts?item.detail:item.role)}</p><span class="status ${isAccounts&&item.type==='THIRD_PARTY_CREDITOR'?'pending':'paid'}">${isAccounts?(item.type==='INTERNAL'?'Business owned':'External creditor'):staff?'Staff':esc(item.category)}</span>${!isAccounts&&(!staff||payeeRoles(item).length>1)?`<small class="payee-roles">${payeeRoles(item).map(r=>({STAFF:'Staff',SUPPLIER:'Supplier',SUBCONTRACTOR:'Subcontractor'}[r])).join(' &middot; ')}</small>`:''}<div class="large-number">${money(sum(active))}</div>${isAccounts&&item.type==='INTERNAL'?accountMovement(item.id):''}<small>${active.length} ${staff?'salary':'debit'} payment${active.length!==1?'s':''} &middot; all time</small><div style="margin-top:16px;display:flex;justify-content:space-between"><button class="button text" data-edit-reference="${item.id}">Edit</button><button class="button text" data-directory="${item.id}">View transactions ${icon('arrow')}</button></div>${staff?`<button class="button primary" style="margin-top:14px" data-pay-salary="${item.id}">Record salary</button>`:''}</section>`;
+ const stats=summary.directory?.[isAccounts?'accounts':'vendors']?.[item.id];
+ const active=(staff?stats?.salary:stats)||{amount:0,count:0};
+ return `<section class="panel directory-card"><span class="initials ${['','sage','lilac','blue'][i%4]}">${isAccounts?icon('accounts'):esc(initials(item.name))}</span><h2>${esc(item.name)}</h2><p>${esc(isAccounts?item.detail:item.role)}</p><span class="status ${isAccounts&&item.type==='THIRD_PARTY_CREDITOR'?'pending':'paid'}">${isAccounts?(item.type==='INTERNAL'?'Business owned':'External creditor'):staff?'Staff':esc(item.category)}</span>${!isAccounts&&(!staff||payeeRoles(item).length>1)?`<small class="payee-roles">${payeeRoles(item).map(r=>({STAFF:'Staff',SUPPLIER:'Supplier',SUBCONTRACTOR:'Subcontractor'}[r])).join(' &middot; ')}</small>`:''}<div class="large-number">${money(active.amount)}</div>${isAccounts&&item.type==='INTERNAL'?accountMovement(item.id):''}<small>${active.count} ${staff?'salary':'debit'} payment${active.count!==1?'s':''} &middot; all time</small><div style="margin-top:16px;display:flex;justify-content:space-between"><button class="button text" data-edit-reference="${item.id}">Edit</button><button class="button text" data-directory="${item.id}">View transactions ${icon('arrow')}</button></div>${staff?`<button class="button primary" style="margin-top:14px" data-pay-salary="${item.id}">Record salary</button>`:''}</section>`;
  }).join('')}</div>${records.length?'':`<p class="empty-state">${staff?'No staff added yet. Add your first staff member to record salary payments.':subcontractors?'No subcontractors added yet. Add your first subcontractor to track payments.':isAccounts?'No records yet.':'No vendors added yet. Add your first vendor to track payments.'}</p>`}`;
 }
 function accountMovement(id){
@@ -197,14 +273,14 @@ function accountMovement(id){
  return `<div class="detail-line"><span>Client credits</span><strong>${money(a.credits)}</strong></div><div class="detail-line"><span>Incoming</span><strong>${money(a.incoming)}</strong></div><div class="detail-line"><span>Outgoing</span><strong>${money(a.outgoing)}</strong></div>`;
 }
 function clientsDirectory(){
- return `${heading('Your clients. Every receipt.','Manage clients and track payments received.','CLIENT DIRECTORY')}<div style="margin-bottom:22px">${button('Add client','new-client','plus')}</div><div class="directory-grid">${db.clients.map((c,i)=>{const rows=db.transactions.filter(t=>t.type==='CREDIT'&&t.client_id===c.id);return `<section class="panel directory-card"><span class="initials ${['','sage','lilac'][i%3]}">${esc(initials(c.name))}</span><h2>${esc(c.name)}</h2><p>${esc(c.contact||'')}</p><p>${esc(c.phone||'')} ${esc(c.email||'')}</p><div class="large-number">${money(sum(rows))}</div><small>${rows.length} payment${rows.length===1?'':'s'} received</small><div style="margin-top:16px;display:flex;justify-content:space-between"><button class="button text" data-edit-client="${esc(c.id)}">Edit</button><button class="button text" data-directory="${esc(c.id)}">View payments ${icon('arrow')}</button></div></section>`;}).join('')}</div>${db.clients.length?'':'<div class="empty">Add your first client to record incoming payments.</div>'}`;
+ return `${heading('Your clients. Every receipt.','Manage clients and track payments received.','CLIENT DIRECTORY')}<div style="margin-bottom:22px">${button('Add client','new-client','plus')}</div><div class="directory-grid">${db.clients.map((c,i)=>{const rows=summary.directory?.clients?.[c.id]||{amount:0,count:0};return `<section class="panel directory-card"><span class="initials ${['','sage','lilac'][i%3]}">${esc(initials(c.name))}</span><h2>${esc(c.name)}</h2><p>${esc(c.contact||'')}</p><p>${esc(c.phone||'')} ${esc(c.email||'')}</p><div class="large-number">${money(rows.amount)}</div><small>${rows.count} payment${rows.count===1?'':'s'} received</small><div style="margin-top:16px;display:flex;justify-content:space-between"><button class="button text" data-edit-client="${esc(c.id)}">Edit</button><button class="button text" data-directory="${esc(c.id)}">View payments ${icon('arrow')}</button></div></section>`;}).join('')}</div>${db.clients.length?'':'<div class="empty">Add your first client to record incoming payments.</div>'}`;
 }
 function openClientForm(record=null){
  captureDraft();const c=record||{};
  detailDialog.innerHTML=`<div class="modal-head"><h2 id="detail-title">${record?'Edit client':'Add client'}</h2><button class="close-button" data-action="close-detail" aria-label="Close client form">&times;</button></div><form id="client-form" data-id="${esc(c.id||'')}" class="form-body"><div class="form-grid"><label class="form-field full">Client name<input name="name" required maxlength="120" value="${esc(c.name||'')}" placeholder="e.g. ABC Constructions"></label><label class="form-field full">Contact person (optional)<input name="contact" maxlength="120" value="${esc(c.contact||'')}"></label><label class="form-field">Phone (optional)<input name="phone" type="tel" maxlength="40" value="${esc(c.phone||'')}"></label><label class="form-field">Email (optional)<input name="email" type="email" maxlength="254" value="${esc(c.email||'')}"></label></div><div class="form-actions"><button type="button" class="button" data-action="close-detail">Cancel</button><button class="button primary" type="submit">${record?'Save changes':'Add client'}</button></div></form>`;detailDialog.showModal();
 }
-function render(){if(renderAuth())return;if(!connected&&!loadError){document.body?.classList.add('account-loading');main.innerHTML=accountLoader();return;}document.body?.classList.remove('account-loading');if(isProvider()){renderProvider();return;}navigation();main.innerHTML=(!connected?`<div class="connection-banner ${loadError?'error':''}" role="status">${esc(loadError||'Loading your accounts and transactions...')} ${loadError?'<button class="button" data-action="refresh">Retry</button>':''}</div>`:loadError?`<div class="connection-banner error" role="alert">Refresh failed: ${esc(loadError)}. Showing data from the last successful refresh.</div>`:'')+(page==='overview'?`${heading('A clearer view of your money.','Your payments, people, and paybacks. All in one place.')}${overviewControls()}${metrics()}${charts()}${table()}${creditorStrip()}`:page==='transactions'?`${heading('Every payment has a story.','Track client receipts, business debits, and repayments.','TRANSACTION LEDGER')}${table()}`:page==='analytics'?analyticsPage():page==='creditors'?creditors():page==='clients'?clientsDirectory():directory());document.querySelector('.local-badge').textContent=loading?'Refreshing...':connected?`Updated ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`:'API disconnected';}
-function route(){const key=location.hash.slice(1)||'overview';page=['overview','analytics','transactions','creditors','vendors','subcontractors','staff','accounts','clients','customers','users'].includes(key)?key:'overview';pageNumber=1;render();}
+function render(){const focused=document.activeElement?.id==='search'?document.activeElement:null;const selection=focused?[focused.selectionStart,focused.selectionEnd,focused.selectionDirection]:null;if(renderAuth())return;if(!connected&&!loadError){document.body?.classList.add('account-loading');main.innerHTML=accountLoader();return;}document.body?.classList.remove('account-loading');if(isProvider()){renderProvider();return;}navigation();main.innerHTML=(!connected?`<div class="connection-banner ${loadError?'error':''}" role="status">${esc(loadError||'Loading your accounts and transactions...')} ${loadError?'<button class="button" data-action="refresh">Retry</button>':''}</div>`:loadError?`<div class="connection-banner error" role="alert">Refresh failed: ${esc(loadError)}. Showing data from the last successful refresh.</div>`:'')+(page==='overview'?`${heading('A clearer view of your money.','Your payments, people, and paybacks. All in one place.')}${overviewControls()}${metrics()}${charts()}${table()}${creditorStrip()}`:page==='transactions'?`${heading('Every payment has a story.','Track client receipts, business debits, and repayments.','TRANSACTION LEDGER')}${table()}`:page==='analytics'?analyticsPage():page==='creditors'?creditors():page==='clients'?clientsDirectory():directory());document.querySelector('.local-badge').textContent=loading?'Refreshing...':connected?`Updated ${lastRefreshed.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`:'API disconnected';if(focused){const input=document.querySelector('#search');input?.focus({preventScroll:true});if(selection[0]!=null)input?.setSelectionRange?.(...selection);}}
+function route(){const key=location.hash.slice(1)||'overview';page=['overview','analytics','transactions','creditors','vendors','subcontractors','staff','accounts','clients','customers','users'].includes(key)?key:'overview';pageNumber=1;render();if(connected||loading)refreshData(false,false);}
 window.addEventListener('hashchange',route);
 function options(list,selected){return list.map(a=>`<option value="${esc(a.id)}" ${selected===a.id?'selected':''}>${esc(a.name)}</option>`).join('');}
 function enhanceTransactionSelects(){
@@ -276,6 +352,7 @@ function labourPayeeNames(){
  // db is the server-authorized workspace snapshot. Never reuse it for another organization.
  if(window.ClearbookAuth?.enabled && (!window.ClearbookAuth.isSignedIn() || !workspaceSession?.workspace?.id || workspaceSession.workspace.id!==snapshotWorkspaceId))return [];
  const names=new Map();
+ for(const name of summary.payee_names||[])if(!names.has(name.toLowerCase()))names.set(name.toLowerCase(),name);
  for(const t of db.transactions){
   if(t.type!=='EXPENSE'||!isLabourPayeeCategory(t.category)||t.reversed_at||t.status?.[0]==='reversed')continue;
   const name=(t.payee_name||'').trim();
@@ -346,31 +423,31 @@ document.addEventListener('click', async event=>{
    }
    return;
   }
-  if(action==='add'){if(!connected){toast('Connect to the API first.');return;}openForm();}
-  if(action==='filters'){showFilters=!showFilters;render();}
-  if(action==='clear-filters'){filters={};tab='all';search='';pageNumber=1;render();}
+  if(action==='add'){if(!connected){toast('Connect to the API first.');return;}if(await prepareForm())openForm();}
+  if(action==='filters'){showFilters=!showFilters;if(showFilters)await prepareForm();render();}
+  if(action==='clear-filters'){filters={};tab='all';search='';pageNumber=1;await reloadTransactions();}
   if(action==='close-modal'&&!submitting)dialog.close();if(action==='close-detail'&&!submitting)detailDialog.close();
   if(action==='new-client')openClientForm();
-  if(action==='new-staff')openDirectoryForm('staff');
-  if(action==='new-subcontractor')openDirectoryForm('subcontractor');
-  if(target.dataset.paySalary){openForm();draft.category=SALARY_CATEGORY;draft.vendor=target.dataset.paySalary;renderForm();}
+  if(action==='new-staff'&&await prepareForm())openDirectoryForm('staff');
+  if(action==='new-subcontractor'&&await prepareForm())openDirectoryForm('subcontractor');
+  if(target.dataset.paySalary&&await prepareForm()){openForm();draft.category=SALARY_CATEGORY;draft.vendor=target.dataset.paySalary;renderForm();}
   if(action==='new-location')openLocationForm();
   if(action==='new-category')openCategoryForm();
-  if(action==='new-account')openDirectoryForm('account');if(action==='new-vendor')openDirectoryForm('vendor');
-  if(action==='export')exportCSV();
-  if(target.dataset.tab){tab=target.dataset.tab;pageNumber=1;render();}
-  if(target.dataset.pagination){pageNumber=Number(target.dataset.pagination);render();}
-  if(target.dataset.repay)openForm('PAYBACK',target.dataset.repay);
+  if(action==='new-account'&&await prepareForm())openDirectoryForm('account');if(action==='new-vendor'&&await prepareForm())openDirectoryForm('vendor');
+  if(action==='export')await exportCSV();
+  if(target.dataset.tab){tab=target.dataset.tab;pageNumber=1;await reloadTransactions();}
+  if(target.dataset.pagination){pageNumber=Math.max(1,Number(target.dataset.pagination));await reloadTransactions();}
+  if(target.dataset.repay&&await prepareForm())openForm('PAYBACK',target.dataset.repay);
   if(target.dataset.detail)openDetail(target.dataset.detail);
-  if(target.dataset.edit){const t=db.transactions.find(x=>x.id===target.dataset.edit);openForm(t.type,null,t);}
+  if(target.dataset.edit){const t=db.transactions.find(x=>x.id===target.dataset.edit);if(t&&await prepareForm())openForm(t.type,null,t);}
   if(target.dataset.editClient)openClientForm(client(target.dataset.editClient));
-  if(target.dataset.editReference){const isAccount=page==='accounts';openDirectoryForm(isAccount?'account':page==='staff'?'staff':page==='subcontractors'?'subcontractor':'vendor',(isAccount?db.accounts:db.vendors).find(x=>x.id===target.dataset.editReference));}
+  if(target.dataset.editReference&&await prepareForm()){const isAccount=page==='accounts';openDirectoryForm(isAccount?'account':page==='staff'?'staff':page==='subcontractors'?'subcontractor':'vendor',(isAccount?db.accounts:db.vendors).find(x=>x.id===target.dataset.editReference));}
   if(target.dataset.formType&&!submitting){captureDraft();formType=target.dataset.formType;renderForm();}
   if(target.dataset.directory){filters={[page==='accounts'?'payer':page==='clients'?'client':'vendor']:target.dataset.directory,...(page==='staff'?{category:SALARY_CATEGORY}:{})};tab='all';search='';showFilters=true;location.hash='transactions';}
   if(target.dataset.delete){const id=target.dataset.delete;target.closest('.form-actions').outerHTML=`<form id="reversal-form" data-id="${id}" class="confirm-delete"><label class="form-field">Reason for reversal<input name="reason" maxlength="500" required placeholder="e.g. Duplicate entry"></label><p>Reversing keeps the original record and recalculates balances.</p><div class="form-actions"><button type="button" class="button" data-detail="${id}">Keep transaction</button><button class="button danger" type="submit">Reverse transaction</button></div></form>`;}
  } catch(error){toast(error.message);}
 });
-document.addEventListener('input',event=>{if(page==='analytics'&&!isProvider()&&analytics?.handleSearch(event.target))return;if(event.target.name==='amount'){const preview=event.target.closest('.form-field')?.querySelector('[data-amount-words]');if(preview)preview.textContent=amountInWords(event.target.value);}if(event.target.id==='search'){if(event.isComposing)return;const {selectionStart,selectionEnd,selectionDirection}=event.target;search=event.target.value;pageNumber=1;render();const input=document.querySelector('#search');input.focus({preventScroll:true});if(selectionStart!=null)input.setSelectionRange?.(selectionStart,selectionEnd,selectionDirection);showSearchSuggestions();}});
+document.addEventListener('input',event=>{if(page==='analytics'&&!isProvider()&&analytics?.handleSearch(event.target))return;if(event.target.name==='amount'){const preview=event.target.closest('.form-field')?.querySelector('[data-amount-words]');if(preview)preview.textContent=amountInWords(event.target.value);}if(event.target.id==='search'){if(event.isComposing)return;const {selectionStart,selectionEnd,selectionDirection}=event.target;search=event.target.value;pageNumber=1;reloadTransactions(250);render();const input=document.querySelector('#search');input.focus({preventScroll:true});if(selectionStart!=null)input.setSelectionRange?.(selectionStart,selectionEnd,selectionDirection);showSearchSuggestions();}});
 document.addEventListener('focusin',event=>{if(event.target.id==='search')showSearchSuggestions();});
 document.addEventListener('focusout',event=>{if(event.target.id==='search')closeSearchSuggestions();});
 document.addEventListener('mousedown',event=>{if(event.target.closest('[data-search-name]'))event.preventDefault();});
@@ -388,14 +465,14 @@ document.addEventListener('keydown',event=>{
  event.target.setAttribute('aria-activedescendant',options[searchSuggestionIndex].id);
  options[searchSuggestionIndex].scrollIntoView({block:'nearest'});
 });
-document.addEventListener('change',event=>{const el=event.target;if(el.dataset.overviewMonth!==undefined){if(/^\d{4}-(0[1-9]|1[0-2])$/.test(el.value))overviewMonth=el.value;pageNumber=1;render();return;}if(page==='analytics'&&!isProvider()&&analytics?.handleChange(el))return;if(el.dataset.filter){
+document.addEventListener('change',async event=>{const el=event.target;if(el.dataset.overviewMonth!==undefined){if(/^\d{4}-(0[1-9]|1[0-2])$/.test(el.value))overviewMonth=el.value;pageNumber=1;await reloadTransactions();return;}if(page==='analytics'&&!isProvider()&&analytics?.handleChange(el))return;if(el.dataset.filter){
  const key=el.dataset.filter;
  openFilterGroups=new Set([...(document.querySelectorAll?.('details[data-filter-group][open]')||[])].map(group=>group.dataset.filterGroup));
  if(el.type==='checkbox'){
   const values=new Set(filterValues(key));if(el.checked)values.add(el.value);else values.delete(el.value);
   filters[key]=[...values];
  }else filters[key]=el.value;
- pageNumber=1;render();
+ pageNumber=1;await reloadTransactions();
  if(el.type==='checkbox')document.getElementById?.(el.id)?.focus();
  }if(el.form?.id==='transaction-form'&&el.name==='category')changeExpenseCategory(el.value);if(el.form?.id==='transaction-form'&&el.name==='vendor')draft.vendor=el.value;});
 document.addEventListener('submit',async event=>{
@@ -429,7 +506,8 @@ document.addEventListener('submit',async event=>{
    const fields=Object.fromEntries(new FormData(form)),id=form.dataset.id;
    const body=Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,value.trim()]));
    const result=await api('/clients'+(id?'/'+id:''),{method:id?'PATCH':'POST',body});
-   if(!id){db.clients.push(result);if(dialog.open)draft.client_id=result.id;}
+   db.clients=db.clients.filter(c=>c.id!==result.id).concat(result);
+   if(!id&&dialog.open)draft.client_id=result.id;
    detailDialog.close();toast(id?'Client updated.':'Client added.');
   }else if(form.id==='location-form'){
    const name=String(new FormData(form).get('name')||'').trim();
@@ -451,6 +529,8 @@ document.addEventListener('submit',async event=>{
    if(!isAccount&&!roles.length)throw new Error('Choose at least one role.');
    const body={name:v.name.trim(),...(isAccount?{type:v.type,owner:v.owner.trim(),detail:v.description.trim()}:{category:v.category,role:v.description.trim(),roles})};
    const result=await api(`/${isAccount?'accounts':'vendors'}${id?'/'+id:''}`,{method:id?'PATCH':'POST',body});
+   const entity=isAccount?'accounts':'vendors';
+   db[entity]=db[entity].filter(record=>record.id!==result.id).concat(result);
    detailDialog.close();if(dialog.open){draft[isAccount?'payer':'vendor']=result.id;if(!isAccount)draft.category=form.dataset.kind==='staff'?SALARY_CATEGORY:result.category;}
    toast(id?'Changes saved.':isAccount?'Account added.':form.dataset.kind==='staff'?'Staff member added.':form.dataset.kind==='subcontractor'?'Subcontractor added.':'Vendor added.');
   }else{
@@ -458,13 +538,14 @@ document.addEventListener('submit',async event=>{
    await api(`/transactions/${id}/reverse`,{method:'POST',body:{reason,version:t.version}});detailDialog.close();toast('Transaction reversed. History preserved.');
   }
   if(loading) await pendingLoad;
-  const refreshed=await refreshData();
+  const resource=({'client-form':'clients','category-form':'categories','location-form':'locations','directory-form':form.dataset?.kind==='account'?'accounts':'vendors'})[form.id]||'transactions';
+  const refreshed=await refreshData(false,resource);
   if(dialog.open)renderForm();
   if(!refreshed)toast('Saved successfully, but refresh failed. Click Refresh to load the latest data.');
  }catch(error){toast(error.message);}
  finally{submitting=false;if(submitButton)submitButton.disabled=false;}
 });
-function exportCSV(){const transactions=page==='staff'?db.transactions.filter(t=>t.category===SALARY_CATEGORY&&!t.reversed_at&&t.status?.[0]!=='reversed'):filteredTransactions();const rows=window.ClearbookAnalytics.omitEmptySalaryMonth([['Date','Type','Client','From account','To account','Payee','Category','Salary month','Location','Mode','Amount (INR)','Status'],...transactions.map(t=>[t.date,t.type==='EXPENSE'?'Debit':t.type,client(t.client_id)?.name,account(t.payer)?.name,account(t.recipient)?.name,payeeName(t),t.category||'',t.salary_month||'',t.location,t.mode,t.amount,reimbursement(t)[1]]),...window.ClearbookAnalytics.exportTotalRows(transactions,12,10)]);const safeCell=value=>{let text=String(value??'');if(/^[=+@\-\t\r]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};const blob=new Blob(['\uFEFF'+rows.map(row=>row.map(safeCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`clearbook-transactions-${isoToday()}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Transaction export downloaded.');}
+async function exportCSV(){const generation=loadGeneration;toast('Preparing export...');if(!await prepareForm())return;const query=page==='staff'?new URLSearchParams({limit:'200',page:'1',category:SALARY_CATEGORY}):transactionQuery({all:true});const transactions=await allTransactionPages(query,path=>{if(generation!==loadGeneration||window.ClearbookAuth?.enabled&&!window.ClearbookAuth.isSignedIn())throw new Error('Export cancelled because the view changed.');return api(path);});if(generation!==loadGeneration||window.ClearbookAuth?.enabled&&!window.ClearbookAuth.isSignedIn())return;const rows=window.ClearbookAnalytics.omitEmptySalaryMonth([['Date','Type','Client','From account','To account','Payee','Category','Salary month','Location','Mode','Amount (INR)','Status'],...transactions.map(t=>[t.date,t.type==='EXPENSE'?'Debit':t.type,client(t.client_id)?.name,account(t.payer)?.name,account(t.recipient)?.name,payeeName(t),t.category||'',t.salary_month||'',t.location,t.mode,t.amount,reimbursement(t)[1]]),...window.ClearbookAnalytics.exportTotalRows(transactions,12,10)]);const safeCell=value=>{let text=String(value??'');if(/^[=+@\-\t\r]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};const blob=new Blob(['\uFEFF'+rows.map(row=>row.map(safeCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`clearbook-transactions-${isoToday()}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Transaction export downloaded.');}
 let authError='';
 function renderProvider(){
  const userView=page==='users';
@@ -504,6 +585,6 @@ function renderAuth(){
  return false;
 }
 if(window.ClearbookAuth){
- window.addEventListener('clearbook-auth-change',()=>{if(!window.ClearbookAuth.isSignedIn()){workspaceSession=null;providerData={customers:[],users:[]};db={accounts:[],vendors:[],transactions:[]};summary={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};connected=false;dialog.close();detailDialog.close();render();}});
+ window.addEventListener('clearbook-auth-change',()=>{if(!window.ClearbookAuth.isSignedIn()){++loadGeneration;clearTimeout(searchTimer);dataCache.clear();cacheWorkspace=null;analyticsRows=[];transactionRows=[];transactionTotal=0;snapshotWorkspaceId=null;loading=false;workspaceSession=null;providerData={customers:[],users:[]};db={accounts:[],vendors:[],clients:[],transactions:[]};summary={totals:{expenses:0,fronted:0,settled:0,outstanding:0},creditors:[]};connected=false;dialog.close();detailDialog.close();render();}});
  window.CLEARBOOK_READY=(async()=>{try{await window.ClearbookAuth.init();}catch(error){authError=error.message;}route();if(!window.ClearbookAuth.enabled||window.ClearbookAuth.isSignedIn())await refreshData();})();
 }else{route();window.CLEARBOOK_READY=refreshData();}

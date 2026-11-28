@@ -52,7 +52,7 @@ without names remain valid. Other categories keep their vendor/staff selection.
 Payee name suggests previously saved names across these three labour categories
 in the current organization. Users can choose a name, type a new one or leave it
 blank. Suggestions ignore capitalization and surrounding spaces, exclude reversed
-payments and are derived from the loaded organization snapshot without a new table
+payments and are derived from the organization's dashboard summary without a new table
 or browser storage. Names are available after the payment is saved and refreshed.
 
 Vendors, Subcontractors and Staff have separate directory screens. Vendors lists
@@ -117,7 +117,21 @@ the same filtered records. Clear filters resets all selections.
 
 `npm run check` checks JavaScript syntax. `npm test` covers PKCE, callback validation, session renewal and logout with mocked Cognito responses. `npm run build` creates static output. `npm run test:integration` starts an isolated backend and this repository's development proxy, then exercises the actual frontend handlers against the HTTP API. It requires the backend checkout alongside this one, or `CLEARBOOK_BACKEND_DIR` pointing at it. Python and the backend's development requirements must be installed. The test uses DOM stubs; it is not a visual browser test.
 
-Changes load on startup, after saves and through **Refresh**. No endpoint polling is used. Each transaction has a location; expenses can select a vendor.
+The overview requests five transactions for the selected month; the transaction
+ledger requests ten per page. Search, tabs, date ranges and multi-select filters
+are applied by the API before pagination. Overview charts and directory totals
+come from dashboard aggregates, so they include payments outside the visible page.
+References load as needed and remain cached in memory for the current workspace.
+Saves invalidate the affected references, summaries and ledger pages; **Refresh**
+clears the cache. Navigation and filtering load missing data without polling.
+CSV export retrieves every matching page only when requested.
+
+Deploy the backend changes before this frontend: `/dashboard?month=YYYY-MM`
+returns monthly chart and directory aggregates, and `/transactions` accepts `tab`
+and a JSON `filters` object containing arrays of account, client, payee, category
+and location values. The existing document store still reads workspace records
+on the server; this change bounds normal browser downloads, not DynamoDB reads.
+Each transaction has a location; expenses can select a vendor.
 
 ## Provider and customer dashboards
 
@@ -141,7 +155,10 @@ Every transaction form includes a required Location dropdown and + Add location.
 
 ## Analytics
 
-Open **Analytics** in the workspace navigation, or visit `/#analytics`. This separate page uses the complete paginated ledger snapshot already loaded by the app. Changing filters, charts or saved views makes no API requests; **Refresh** loads current data. No backend deployment or additional table is required.
+Open **Analytics** in the workspace navigation, or visit `/#analytics`. This page
+loads the complete paginated ledger only when opened and caches it in memory.
+Changing its filters, charts or saved views makes no API requests; **Refresh**
+loads current data. Large all-time analytics reports can still take time to load.
 
 The page includes client credits, expenses, credits less expenses, net account movement, period comparisons, daily/weekly/monthly charts, breakdowns by category/vendor/client/location/account/payment mode, location performance, client and vendor rankings, business account movement, and a searchable transaction explorer with sorting, pagination and record details. Date presets include the Indian financial year starting April 1. Long chart ranges automatically use a coarser grouping and show the effective grouping; the chart data table provides exact values.
 
